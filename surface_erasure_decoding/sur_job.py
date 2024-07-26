@@ -1,5 +1,5 @@
-from sur_v7_builder import *
-from sur_v7_model import *
+from surface_erasure_decoding.sur_builder import *
+from surface_erasure_decoding.sur_model import *
 
 import time
 

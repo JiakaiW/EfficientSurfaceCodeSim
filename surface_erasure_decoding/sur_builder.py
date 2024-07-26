@@ -16,7 +16,7 @@ import json
 import sys
 import zipfile
 import pickle
-from sur_v7_model import *
+from surface_erasure_decoding.sur_model import *
 import time
 
 
