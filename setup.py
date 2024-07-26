@@ -2,8 +2,8 @@ import os
 
 from setuptools import setup, find_namespace_packages
 
-DIST_NAME = "surface_erasure_sim"
-PACKAGE_NAME = "surface_erasure_sim"
+DIST_NAME = "surface_erasure_decoding"
+PACKAGE_NAME = "surface_erasure_decoding"
 
 REQUIREMENTS = [
     "numpy",
