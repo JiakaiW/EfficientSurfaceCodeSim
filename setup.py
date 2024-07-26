@@ -36,7 +36,7 @@ setup(
     license="Apache 2.0",
     packages=find_namespace_packages(exclude=None),
     install_requires=REQUIREMENTS,
-    extras_require=EXTRA_REQUIREMENTS,
+    extras_require=None,
     classifiers=[
         "Environment :: Console",
         "License :: OSI Approved :: Apache Software License",
