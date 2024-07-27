@@ -40,7 +40,7 @@ class MQE: #stands for Multi_qubit_error/event
     p: float
     list_of_SQE: List[SQE]
     def __post_init__(self):
-        assert self.p > 0, "can't create an event with 0 probability?"
+        assert self.p >= 0, "can't create an event with below 0 probability?"
 
     
 
