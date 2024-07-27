@@ -5,25 +5,25 @@ import time
 
 @dataclass
 class Sample_decode_job:
+    job_id: str
+    circuit_id: str
     d: int
     p_e: float
     p_z_shift:float
     p_p: float
+    p_m:float
     shots: int
 
-    job_id: str
-    circuit_id: str
 
     def get_builder(self):
         # Assemble circuit builder
         after_cz_error_model = get_2q_error_model(p_e=self.p_e,
                                                   p_z_shift=self.p_z_shift, 
                                                   p_p=self.p_p)
-        meas_error = 0.001
         builder = easure_circ_builder(rounds = self.d,
                                       distance= self.d,
                                       after_cz_error_model=after_cz_error_model,
-                                      measurement_error=meas_error
+                                      measurement_error=self.p_m
                                       )
         builder.generate_circuit_and_decoding_info()
         return builder
@@ -41,13 +41,13 @@ class Sample_decode_job:
         t1 = time.time()
         # Decode
         new_circ_num_errors = 0
-        normal_circ_num_errors = 0
+        # normal_circ_num_errors = 0
         for i in range(self.shots):
             predicted  = builder.decode_by_generate_new_circ(det_samples[i],'S',meas_samples[i])
             new_circ_num_errors += actual_obs_chunk[i][0] != predicted
 
-            predicted = builder.decode_without_changing_weights(det_samples[i],'S',meas_samples[i])
-            normal_circ_num_errors += actual_obs_chunk[i][0] != predicted
+            # predicted = builder.decode_without_changing_weights(det_samples[i],'S',meas_samples[i])
+            # normal_circ_num_errors += actual_obs_chunk[i][0] != predicted
 
             if i%10 == 0 and print_progress:
                 clear_output(wait=True)
@@ -58,13 +58,17 @@ class Sample_decode_job:
         result = {
             'job_id': self.job_id,
             'circuit_id': self.circuit_id,
+            'd': self.d,
+            'p_e':self.p_e,
+            'p_z_shift':self.p_z_shift,
+            'p_p':self.p_p,
+            'p_m':self.p_m,
             'shots':self.shots,
             'new_circ':     int(new_circ_num_errors),
-            'normal': int(normal_circ_num_errors)
+            # 'normal': int(normal_circ_num_errors)
         }
 
         return result
-
 
 
 # This function can be run over condor
