@@ -34,7 +34,7 @@ setup(
     author="Jiakai Wang",
     author_email="jwang2648@wisc.edu",
     license="Apache 2.0",
-    packages=find_namespace_packages(exclude=None),
+    packages=find_namespace_packages(exclude=['notebooks']),
     install_requires=REQUIREMENTS,
     extras_require=None,
     classifiers=[
