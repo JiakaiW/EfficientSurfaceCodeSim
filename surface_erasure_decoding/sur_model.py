@@ -15,6 +15,7 @@ class Ancilla_tracker:
         self.next_ancilla_qubit_index += 1
         return self.next_ancilla_qubit_index - 1
 
+
 Etype_to_stim_target_fun = {
     'X': stim.target_x,
     'Y': stim.target_y,
@@ -148,6 +149,7 @@ class Error_mechanism:
                 list_of_args.append(["ELSE_CORRELATED_ERROR",targets,stepwise_p])
             list_of_args[0][0] = "CORRELATED_ERROR"
             return list_of_args
+        
         elif mode == 'erasure':
             assert type(self.ancilla_tracker_instance) == Ancilla_tracker, "ancilla tracker not assigned"
             
@@ -168,62 +170,56 @@ class Error_mechanism:
                 list_of_args.append(["ELSE_CORRELATED_ERROR",targets,stepwise_p])
             list_of_args[0][0] = "CORRELATED_ERROR" # The first instruction should be CORRELATED_ERROR in stim
             return list_of_args
-        elif mode == 'dummy_erasure':
-            # Here I use PAULI_CHANNEL_TWO to make it easier to convert erasure location to 
-            assert type(self.ancilla_tracker_instance) == Ancilla_tracker, "ancilla tracker not assigned"
-            
-            list_of_args = []
-            ancillas = []
-            for i in range(len(qubits)):
-                if self.p_herald[i] > 0:
-                    ancillas.append(self.ancilla_tracker_instance.assign_ancilla(self.Etype_to_sum[i]['X'],self.Etype_to_sum[i]['Y'],self.Etype_to_sum[i]['Z']))
-                    list_of_args.append(["PAULI_CHANNEL_2",[qubits[i], ancillas[-1]],[
-                        # ix iy iz
-                        0, 0, 0,
-                        # xi xx xy xz
-                        0.1, 0.1, 0, 0,
-                        # yi yx yy yz
-                        0, 0, 0, 0,
-                        # zi zx zy zz
-                        0, 0, 0, 0
-                    ]])
-                else: # Attention: in erasure mode it does not assign ancilla to qubit unless that qubit has possitive herald probability
-                    ancillas.append(None)
-            return list_of_args
-        elif mode == 'dynamic':
-            # This mode is only used for decoding, not for sampling
-            # In this mode, all X/Y/Z errors on data qubits are considered independent
-            # so I use PAULI_CHANNEL_1 to append the conditional, 1-q errors
-            # Each PAULI_CHANNEL_1's X/Y/Z are supposed to be disjoint, but approximated as independent in DEM, but it's good approximation
-
-            # First determine if none of the sites used erasure detection,  fall back to normal mode in that case
-            if self._herald_check_cache is None:
-                self._herald_check_cache = not any(prob > 0 for prob in self.p_herald)
-            if self._herald_check_cache:
-                return self.get_instruction(qubits,mode='normal')
-            
-            # If there's ancilla assigned
-            ancilla_meas_idxs = []
-            for i in range(len(qubits)):
-                if self.p_herald[i] > 0:
-                    ancilla_meas_idxs.append(self.erasure_measurement_index_in_list[0])
-                    self.erasure_measurement_index_in_list[0] += 1
-                else:
-                    ancilla_meas_idxs.append(None)
-            list_of_args = []
-            for i, qubit in enumerate(qubits):
-                # First determine if we assign(ed) ancilla to the qubit or not
-                if ancilla_meas_idxs[i] != None:
-                    meas = self.single_measurement_sample[ancilla_meas_idxs[i]]
-                    if meas == 0 and not self.trivial_when_not_detected[i]: # No erasure
-                        list_of_args.append(["PAULI_CHANNEL_1", qubit, [self.conditional_probabilities[i][3], self.conditional_probabilities[i][4], self.conditional_probabilities[i][5]]])
-                    else :
-                        list_of_args.append(["PAULI_CHANNEL_1", qubit, [self.conditional_probabilities[i][0], self.conditional_probabilities[i][1], self.conditional_probabilities[i][2]]])
-                else:# We didn't use erasure detection on this site, fall back to static probabilities for this particular site (indistinction to normal mode)
-                    list_of_args.append(["PAULI_CHANNEL_1", qubit, [self.Etype_to_sum[i]['X'], self.Etype_to_sum[i]['Y'], self.Etype_to_sum[i]['Z']]])
-            return list_of_args
         else:
             raise Exception("unsupported mode")
+
+    def get_erasure_instruction_vectorized(self,
+                                           qubits:List[int]):
+        """
+        This function is a newer implementation of generating instructions with posterior probabilities. 
+        The vectorization is over a batch of operations. For example, rather than doing one CNOT at a time, this vectorized method 
+            generates one batch of CNOT instructions at a time.
+        Accept qubits in the style of stim instructions, len(qubits) == integer multiple of self.num_qubits
+        """
+        assert len(qubits) % self.num_qubits == 0, "wrong number of qubits"
+        data_qubits_array = np.array(qubits).reshape(self.num_qubits,-1) # here it refers to non-erasure-virtual-flag qubits
+        # Each column of data_qubits_array has length num_qubits
+        # It's like 
+        #  array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        #        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
+        if self.num_herald_locations > 0:
+            num_ops = data_qubits_array.shape[1]
+            num_ancillas= num_ops * self.num_herald_locations
+            # Assign ancilla array based on self.p_herald[i] > 0?, add the number of ancilla to self.erasure_measurement_index_in_list[0]
+            ancilla = np.zeros(data_qubits_array.shape, dtype=int)
+            counter = self.erasure_measurement_index_in_list[0]
+            fill_values = np.arange(counter, counter + num_ancillas)
+            # TODO: Somehow the line below leads to incorrect erasure measurement index. 
+            # I think the original line makes sense but it doesn't work
+            # fill_values = fill_values.reshape(num_ops, self.num_herald_locations).T # original
+            fill_values = fill_values.reshape( self.num_herald_locations,num_ops) # What works
+            ancilla[self.herald_locations, :] = fill_values
+            self.erasure_measurement_index_in_list[0] += num_ancillas
+            
+            # Get bool array signifing erasure detection
+            erasure_meas = np.zeros(ancilla.shape, dtype=bool)
+            erasure_meas[self.herald_locations, :] = self.single_measurement_sample[ancilla[self.herald_locations, :]]
+            
+            # For each qubit location, get two conditional probabilities array or the static probability if erasure conversion not used. 
+            list_of_args = []
+            for i in range(self.num_qubits): # This looks like a loop, but this loop is at most length-2. It's still parrallized
+                if i in self.herald_locations: 
+                    converted_data_qubits = data_qubits_array[i][np.where(erasure_meas[i])[0]]
+                    no_detection_data_qubits = data_qubits_array[i][np.where(~erasure_meas[i])[0]]
+                    list_of_args.append(["PAULI_CHANNEL_1", converted_data_qubits, [self.conditional_probabilities[i][0], self.conditional_probabilities[i][1], self.conditional_probabilities[i][2]]])
+                    list_of_args.append(["PAULI_CHANNEL_1", no_detection_data_qubits, [self.conditional_probabilities[i][3], self.conditional_probabilities[i][4], self.conditional_probabilities[i][5]]])
+                else:
+                    list_of_args.append(["PAULI_CHANNEL_1", data_qubits_array[i], [self.Etype_to_sum[i]['X'], self.Etype_to_sum[i]['Y'], self.Etype_to_sum[i]['Z']]])
+        else:
+            list_of_args = []
+            for i in range(self.num_qubits):
+                list_of_args.append(["PAULI_CHANNEL_1", data_qubits_array[i], [self.Etype_to_sum[i]['X'], self.Etype_to_sum[i]['Y'], self.Etype_to_sum[i]['Z']]])
+        return list_of_args
     
     def get_dynamic_instruction_vectorized(self,
                                            qubits:List[int]):
@@ -259,8 +255,8 @@ class Error_mechanism:
             
             # For each qubit location, get two conditional probabilities array or the static probability if erasure conversion not used. 
             list_of_args = []
-            for i in range(self.num_qubits):
-                if i in self.herald_locations:
+            for i in range(self.num_qubits): # This looks like a loop, but this loop is at most length-2. It's still parrallized
+                if i in self.herald_locations: 
                     converted_data_qubits = data_qubits_array[i][np.where(erasure_meas[i])[0]]
                     no_detection_data_qubits = data_qubits_array[i][np.where(~erasure_meas[i])[0]]
                     list_of_args.append(["PAULI_CHANNEL_1", converted_data_qubits, [self.conditional_probabilities[i][0], self.conditional_probabilities[i][1], self.conditional_probabilities[i][2]]])
@@ -272,8 +268,16 @@ class Error_mechanism:
             for i in range(self.num_qubits):
                 list_of_args.append(["PAULI_CHANNEL_1", data_qubits_array[i], [self.Etype_to_sum[i]['X'], self.Etype_to_sum[i]['Y'], self.Etype_to_sum[i]['Z']]])
         return list_of_args
+    
+    def get_deterministic_instruction_vectorized(self,
+                                           qubits:List[int]):
+        """
+        Used in importance sampling
+        This function is similar to get_dynamic_instruction_vectorized. It is used to generate batch of operations with error rates dependent on pre-computed results. 
 
-
+        In addition to 
+        """
+        pass
 
     def __repr__(self):
         s = ''
@@ -281,6 +285,7 @@ class Error_mechanism:
             s += str(mqe)
             s += '\n'
         return s
+
 @dataclass
 class Gate_error_model:
     """
@@ -435,6 +440,7 @@ def get_2q_biased_erasure_with_differential_shift_mechanism(p_e,p_z_shift):
     return Error_mechanism(
     [   
         MQE((1- p_e)**2 * (1-p_z_shift)**2,[SQE("I",False),SQE("I",False)]), # no detection cases
+
         MQE((1- p_e)**2 * p_z_shift * (1-p_z_shift),[SQE("Z",False),SQE("I",False)]),# differential shift on computational subspace
         MQE((1- p_e)**2 * p_z_shift * (1-p_z_shift),[SQE("I",False),SQE("Z",False)]),
         MQE((1- p_e)**2 * p_z_shift**2,[SQE("Z",False),SQE("Z",False)]),

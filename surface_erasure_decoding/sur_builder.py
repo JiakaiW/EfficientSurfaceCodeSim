@@ -299,7 +299,7 @@ def DEM_to_Matching(model: stim.DetectorErrorModel,
             return
         
 
-        dets_str = str(sorted(dets))
+        # dets_str = str(sorted(dets))
 
         if erasure_handling == None: 
             #Used when not changing weights or the dem is already re-constructed
@@ -313,35 +313,35 @@ def DEM_to_Matching(model: stim.DetectorErrorModel,
                 p = p * (1 - old_p) + old_p * (1 - p)
                 g.remove_edge(*dets)
 
-        elif erasure_handling == 'X' or erasure_handling == 'Y' or erasure_handling == 'Z' or erasure_handling == 'naive':
-            erasure = False
-            if g.has_edge(*dets):
-                already_erasure = g.get_edge_data(*dets)['erased']  # TODO: why doesn't this use edge_data['erasure']? This doesn't make sense, Now I changed, does it work?
-                if already_erasure:
-                    return # leave it be p=1, erasure = true
-                else:
-                    old_p = g.get_edge_data(*dets)["error_probability"]
-                    p = p * (1 - old_p) + old_p * (1 - p)
-                    g.remove_edge(*dets)
+        # elif erasure_handling == 'X' or erasure_handling == 'Y' or erasure_handling == 'Z' or erasure_handling == 'naive':
+        #     erasure = False
+        #     if g.has_edge(*dets):
+        #         already_erasure = g.get_edge_data(*dets)['erased']  # TODO: why doesn't this use edge_data['erasure']? This doesn't make sense, Now I changed, does it work?
+        #         if already_erasure:
+        #             return # leave it be p=1, erasure = true
+        #         else:
+        #             old_p = g.get_edge_data(*dets)["error_probability"]
+        #             p = p * (1 - old_p) + old_p * (1 - p)
+        #             g.remove_edge(*dets)
 
-            if erasure_handling != 'naive': #(X or Y or Z)
-                list_of_meas_and_error_type = detectors_to_list_of_meas.get(dets_str) #Use dict.get so it won't throw an error if key doesn't exist
-                if list_of_meas_and_error_type is not None:
-                    for meas_and_error_type in list_of_meas_and_error_type:
-                        erasure_measurement_index = meas_and_error_type[0]
-                        error_type = meas_and_error_type[1]
-                        if single_measurement_sample[erasure_measurement_index] == 1 and (error_type == erasure_handling or erasure_handling == 'Y'):
-                            erasure = True
-                            break
-            else:
-                list_of_meas = detectors_to_list_of_meas.get(dets_str)
-                if list_of_meas is not None:
-                    for meas in list_of_meas:
-                        if single_measurement_sample[meas] == 1:
-                            erasure = True
-                            break
-            if erasure:
-                p = 1
+        #     if erasure_handling != 'naive': #(X or Y or Z)
+        #         list_of_meas_and_error_type = detectors_to_list_of_meas.get(dets_str) #Use dict.get so it won't throw an error if key doesn't exist
+        #         if list_of_meas_and_error_type is not None:
+        #             for meas_and_error_type in list_of_meas_and_error_type:
+        #                 erasure_measurement_index = meas_and_error_type[0]
+        #                 error_type = meas_and_error_type[1]
+        #                 if single_measurement_sample[erasure_measurement_index] == 1 and (error_type == erasure_handling or erasure_handling == 'Y'):
+        #                     erasure = True
+        #                     break
+        #     else:
+        #         list_of_meas = detectors_to_list_of_meas.get(dets_str)
+        #         if list_of_meas is not None:
+        #             for meas in list_of_meas:
+        #                 if single_measurement_sample[meas] == 1:
+        #                     erasure = True
+        #                     break
+        #     if erasure:
+        #         p = 1
 
         else:
             Exception('unimplemented weight assignment method')
@@ -356,9 +356,9 @@ def DEM_to_Matching(model: stim.DetectorErrorModel,
             weight = -math.log(p)
         if erasure_handling == None:
             g.add_edge(*dets, weight=weight, qubit_id=frame_changes, error_probability=p)
-        else:
-            g.add_edge(*dets, weight=weight, qubit_id=frame_changes, error_probability=p, erased = erasure)
-        # end of handle_error()
+        # else:
+        #     g.add_edge(*dets, weight=weight, qubit_id=frame_changes, error_probability=p, erased = erasure)
+        ## end of handle_error()
 
     _iter_model(model, 1, handle_error)
     return pymatching.Matching(g)
@@ -401,12 +401,12 @@ class easure_circ_builder:
     erasure_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
     normal_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
     dynamic_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
-    tracker: Optional[Ancilla_tracker] = field(init=False, repr=False)
+    ancilla_tracker_instance: Optional[Ancilla_tracker] = field(init=False, repr=False)
     first_erasure_ancilla_index: Optional[int] = field(init=False, repr=False)
     erasure_measurement_index_in_list: Optional[int] = field(init=False, repr=False)
-    dummy_dem: Optional[stim.DetectorErrorModel] = field(init=False, repr=False)
-    dummy_matching_L: Optional[pymatching.Matching]= field(init=False, repr=False)
-    dummy_matching_S: Optional[pymatching.Matching]= field(init=False, repr=False)
+    # dummy_dem: Optional[stim.DetectorErrorModel] = field(init=False, repr=False)
+    # dummy_matching_L: Optional[pymatching.Matching]= field(init=False, repr=False)
+    # dummy_matching_S: Optional[pymatching.Matching]= field(init=False, repr=False)
 
     
 
@@ -424,20 +424,20 @@ class easure_circ_builder:
         self.first_erasure_ancilla_index = 2*(self.distance+1)**2 # qubit index
         self.gen_erasure_conversion_circuit()
         self.gen_normal_circuit()
-        self.dummy_dem = self.normal_circuit.detector_error_model(approximate_disjoint_errors=True,decompose_errors=True)
-        self.dummy_matching_L = DEM_to_Matching(self.dummy_dem,curve = 'L')
-        self.dummy_matching_S = DEM_to_Matching(self.dummy_dem,curve = 'S')
+        # self.dummy_dem = self.normal_circuit.detector_error_model(approximate_disjoint_errors=True,decompose_errors=True)
+        # self.dummy_matching_L = DEM_to_Matching(self.dummy_dem,curve = 'L')
+        # self.dummy_matching_S = DEM_to_Matching(self.dummy_dem,curve = 'S')
 
     def gen_erasure_conversion_circuit(self):
         # erasure_circuit is used to sample measurement samples which we do decoding on
-        self.tracker = Ancilla_tracker(self.first_erasure_ancilla_index)
+        self.ancilla_tracker_instance = Ancilla_tracker(self.first_erasure_ancilla_index)
         for attr_name, attr_value in vars(self).items():
             if isinstance(attr_value, Gate_error_model):
-                attr_value.set_ancilla_tracker_instance(self.tracker)
+                attr_value.set_ancilla_tracker_instance(self.ancilla_tracker_instance)
         self.erasure_circuit = stim.Circuit()
     
         self.gen_circuit(self.erasure_circuit, mode = 'erasure')
-        self.erasure_circuit.append("MZ", self.tracker.bare_list_of_ancillas)  # Measure the virtual erasure ancilla qubits
+        self.erasure_circuit.append("MZ", self.ancilla_tracker_instance.bare_list_of_ancillas)  # Measure the virtual erasure ancilla qubits
 
 
     def gen_normal_circuit(self):
@@ -548,12 +548,6 @@ class easure_circ_builder:
                 append_cnot(qubits, noisy=noisy)
                 append_H(target_qubits, noisy=noisy)
 
-        def append_measure(targets: List[int], basis: str, noisy: bool):
-            if noisy:
-                circuit.append("M" + basis, targets, self.measurement_error)
-            else:
-                circuit.append("M" + basis, targets, 0)
-
         def append_reset(targets: List[int], basis: str, noisy: bool):
             assert basis == "X" or basis == "Z", "basis must be X or Z"
             circuit.append("R" + basis, targets)
@@ -569,6 +563,11 @@ class easure_circ_builder:
                                                                                     )
                         for args in list_of_args:
                             circuit.append(*args)
+        def append_measure(targets: List[int], basis: str, noisy: bool):
+            if noisy:
+                circuit.append("M" + basis, targets, self.measurement_error)
+            else:
+                circuit.append("M" + basis, targets, 0)
 
         # function that builds the 1 round of error correction
         def append_cycle_actions(noisy: bool):
@@ -584,105 +583,98 @@ class easure_circ_builder:
             append_reset(self.helper.measurement_qubits, "Z", noisy)
             
 
-        ###################################################
-        # Build the circuit head and first noiseless round
-        ###################################################
-
-        for q, coord in self.helper.q2p.items():
-            circuit.append("QUBIT_COORDS", [q], [coord.real, coord.imag])
-        if not self.XZZX:
-            append_reset(self.helper.data_qubits, "ZX"[self.is_memory_x], noisy=self.SPAM)
-        else:
-            X_reset_data_q = [q for q in self.helper.data_qubits if self.helper.data_qubit_to_MX_or_MZ_in_XZZX[q]]
-            Z_reset_data_q = [q for q in self.helper.data_qubits if not self.helper.data_qubit_to_MX_or_MZ_in_XZZX[q]]
-            if self.is_memory_x:
-                append_reset(X_reset_data_q, "X", noisy=self.SPAM)
-                append_reset(Z_reset_data_q, "Z", noisy=self.SPAM)
+        def build_circ():
+            ###################################################
+            # Build the circuit head and first noiseless round
+            ###################################################
+            for q, coord in self.helper.q2p.items():
+                circuit.append("QUBIT_COORDS", [q], [coord.real, coord.imag])
+            if not self.XZZX:
+                append_reset(self.helper.data_qubits, "ZX"[self.is_memory_x], noisy=self.SPAM)
             else:
-                append_reset(X_reset_data_q, "Z", noisy=self.SPAM)
-                append_reset(Z_reset_data_q, "X", noisy=self.SPAM)
+                X_reset_data_q = [q for q in self.helper.data_qubits if self.helper.data_qubit_to_MX_or_MZ_in_XZZX[q]]
+                Z_reset_data_q = [q for q in self.helper.data_qubits if not self.helper.data_qubit_to_MX_or_MZ_in_XZZX[q]]
+                if self.is_memory_x:
+                    append_reset(X_reset_data_q, "X", noisy=self.SPAM)
+                    append_reset(Z_reset_data_q, "Z", noisy=self.SPAM)
+                else:
+                    append_reset(X_reset_data_q, "Z", noisy=self.SPAM)
+                    append_reset(Z_reset_data_q, "X", noisy=self.SPAM)
 
-        append_reset(self.helper.measurement_qubits, "Z", noisy=self.SPAM)
-        if self.SPAM == False: # Shurti Puri's biased erasure paper has a noiseless round to "initialize the qubit, but Kubica's paper doesn't"
-            append_cycle_actions(noisy=False)
-        else:
-            append_cycle_actions(noisy=True)
-        # In the first round, the detectors have the same value of the measurements
-        for measure in self.helper.chosen_basis_measure_coords:
-            circuit.append(
-                "DETECTOR",
-                [stim.target_rec(-len(self.helper.measurement_qubits) + self.helper.measure_coord_to_order[measure])],
-                [measure.real, measure.imag, 0]
-            )
-        ###################################################
-        # Build the repeated noisy body of the circuit, including the detectors comparing to previous cycles.
-        ###################################################
-        for _ in range(self.rounds-self.SPAM): # The rest noisy rounds
-            append_cycle_actions(noisy=True)
-            circuit.append("SHIFT_COORDS", [], [0, 0, 1])
-            m = len(self.helper.measurement_qubits)
-            # The for loop below calculate the relative measurement indexes to set up the detectors
-            for m_index in self.helper.measurement_qubits:
-                m_coord = self.helper.q2p[m_index]
-                k = m - self.helper.measure_coord_to_order[m_coord] - 1
+            append_reset(self.helper.measurement_qubits, "Z", noisy=self.SPAM)
+            if self.SPAM == False: # Shurti Puri's biased erasure paper has a noiseless round to "initialize the qubit, but Kubica's paper doesn't"
+                append_cycle_actions(noisy=False)
+            else:
+                append_cycle_actions(noisy=True)
+            # In the first round, the detectors have the same value of the measurements
+            for measure in self.helper.chosen_basis_measure_coords:
                 circuit.append(
                     "DETECTOR",
-                    [stim.target_rec(-k - 1), stim.target_rec(-k - 1 - m)],
-                    [m_coord.real, m_coord.imag, 0]
+                    [stim.target_rec(-len(self.helper.measurement_qubits) + self.helper.measure_coord_to_order[measure])],
+                    [measure.real, measure.imag, 0]
                 )
-        ###################################################
-        # In Kubica (Amazon) paper, they do a final noiseless round after d noisy round.
-        # But in Shurti Puri paper, they do d noisy round and only final noiseless measurement. (What's done below.)
-        ###################################################
+            ###################################################
+            # Build the repeated noisy body of the circuit, including the detectors comparing to previous cycles.
+            ###################################################
+            for _ in range(self.rounds-self.SPAM): # The rest noisy rounds
+                append_cycle_actions(noisy=True)
+                circuit.append("SHIFT_COORDS", [], [0, 0, 1])
+                m = len(self.helper.measurement_qubits)
+                # The for loop below calculate the relative measurement indexes to set up the detectors
+                for m_index in self.helper.measurement_qubits:
+                    m_coord = self.helper.q2p[m_index]
+                    k = m - self.helper.measure_coord_to_order[m_coord] - 1
+                    circuit.append(
+                        "DETECTOR",
+                        [stim.target_rec(-k - 1), stim.target_rec(-k - 1 - m)],
+                        [m_coord.real, m_coord.imag, 0]
+                    )
+            ###################################################
+            # In Kubica (Amazon) paper, they do a final noiseless round after d noisy round.
+            # But in Shurti Puri paper, they do d noisy round and only final noiseless measurement. (What's done below.)
+            ###################################################
 
-        ###################################################
-        # Build the end of the circuit, getting out of the cycle state and terminating.
-        # In particular, the data measurements create detectors that have to be handled specially.
-        # Also, the tail is responsible for identifying the logical observable.
-        ###################################################
-        if not self.XZZX:
-            append_measure(self.helper.data_qubits, "ZX"[self.is_memory_x], noisy=self.SPAM)
-        else:
-            # Whether measuring in Z or X basis has to do with whether the qubit was reset in the circuit head in Z or X basis
-            for q in self.helper.data_qubits:
-                measure_in_Z_when_memory_x = self.helper.data_qubit_to_MX_or_MZ_in_XZZX[q]
-                measure_in_Z = measure_in_Z_when_memory_x if self.is_memory_x else not measure_in_Z_when_memory_x
-                append_measure([q], "ZX"[measure_in_Z], noisy=self.SPAM)
+            ###################################################
+            # Build the end of the circuit, getting out of the cycle state and terminating.
+            # In particular, the data measurements create detectors that have to be handled specially.
+            # Also, the tail is responsible for identifying the logical observable.
+            ###################################################
+            if not self.XZZX:
+                append_measure(self.helper.data_qubits, "ZX"[self.is_memory_x], noisy=self.SPAM)
+            else:
+                # Whether measuring in Z or X basis has to do with whether the qubit was reset in the circuit head in Z or X basis
+                for q in self.helper.data_qubits:
+                    measure_in_Z_when_memory_x = self.helper.data_qubit_to_MX_or_MZ_in_XZZX[q]
+                    measure_in_Z = measure_in_Z_when_memory_x if self.is_memory_x else not measure_in_Z_when_memory_x
+                    append_measure([q], "ZX"[measure_in_Z], noisy=self.SPAM)
 
-        # In CSS surface code, only physical Z error can cause logical Z error,
-        #   and physical Z error are only picked up by X stabilizers,
-        #   which are in chosen_basis_measure_coords
-        # For XZZX code, there's no X or Z observable, but horizontal and vertical observable, but it works the same
-        for measure in self.helper.chosen_basis_measure_coords:
-            detectors = []
-            for delta in self.helper.z_order:
-                data = measure + delta
-                if data in self.helper.p2q:
-                    detectors.append(len(self.helper.data_qubits) - self.helper.data_coord_to_order[data])
-            detectors.append(len(self.helper.data_qubits) + len(self.helper.measurement_qubits) - self.helper.measure_coord_to_order[measure])
-            detectors.sort()
+            # In CSS surface code, only physical Z error can cause logical Z error,
+            #   and physical Z error are only picked up by X stabilizers,
+            #   which are in chosen_basis_measure_coords
+            # For XZZX code, there's no X or Z observable, but horizontal and vertical observable, but it works the same
+            for measure in self.helper.chosen_basis_measure_coords:
+                detectors = []
+                for delta in self.helper.z_order:
+                    data = measure + delta
+                    if data in self.helper.p2q:
+                        detectors.append(len(self.helper.data_qubits) - self.helper.data_coord_to_order[data])
+                detectors.append(len(self.helper.data_qubits) + len(self.helper.measurement_qubits) - self.helper.measure_coord_to_order[measure])
+                detectors.sort()
+                list_of_records = []
+                for d in detectors:
+                    list_of_records.append(stim.target_rec(-d))
+                circuit.append("DETECTOR", list_of_records, [measure.real, measure.imag, 1])
+
+            # Logical observable.
+            obs_inc = [len(self.helper.data_qubits) - self.helper.data_coord_to_order[q] for q in self.helper.chosen_basis_observable_coords]
+            obs_inc.sort()
             list_of_records = []
-            for d in detectors:
-                list_of_records.append(stim.target_rec(-d))
-            circuit.append("DETECTOR", list_of_records, [measure.real, measure.imag, 1])
+            for obs in obs_inc:
+                list_of_records.append(stim.target_rec(-obs))
+            circuit.append("OBSERVABLE_INCLUDE", list_of_records, 0)
+        
+        build_circ()
 
-        # Logical observable.
-        obs_inc = [len(self.helper.data_qubits) - self.helper.data_coord_to_order[q] for q in self.helper.chosen_basis_observable_coords]
-        obs_inc.sort()
-        list_of_records = []
-        for obs in obs_inc:
-            list_of_records.append(stim.target_rec(-obs))
-        circuit.append("OBSERVABLE_INCLUDE", list_of_records, 0)
-
-
-    def decode_without_changing_weights(self,single_detector_sample,curve,single_measurement_sample= None):
-        # single_measurement_sample in the arguement is just to keep consistancy with other decoders
-        assert curve in ['S','L']
-        if curve == 'L':
-            predicted_observable =self.dummy_matching_L.decode(single_detector_sample)[0]
-        else:
-            predicted_observable =self.dummy_matching_S.decode(single_detector_sample)[0]
-        return predicted_observable
 
     def decode_by_generate_new_circ(self,single_detector_sample,curve,single_measurement_sample):
         assert curve in ['S','L']
@@ -695,80 +687,93 @@ class easure_circ_builder:
 
 
 
-def ancilla_to_detectors(erasure_circ_text: str) -> Dict[int, List[List[int]]]:
-    '''
-    This function takes in the text form of an erasure stim circuit and output a dictionary that maps the erasure qubit index to the index of corresponding detectors
-    It edits the string representation of the circuit to isolate error to find out which detectors one specific error flips
-    To isolate an error, it removes all CORRELATED_ERROR and ELSE_CORRELATED_ERROR and adjusts the error rate for measurements to 0
-    '''
+
+    # def decode_without_changing_weights(self,single_detector_sample,curve,single_measurement_sample= None):
+    #     # single_measurement_sample in the arguement is just to keep consistancy with other decoders
+    #     assert curve in ['S','L']
+    #     if curve == 'L':
+    #         predicted_observable =self.dummy_matching_L.decode(single_detector_sample)[0]
+    #     else:
+    #         predicted_observable =self.dummy_matching_S.decode(single_detector_sample)[0]
+    #     return predicted_observable
+
+
+# def ancilla_to_detectors(erasure_circ_text: str) -> Dict[int, List[List[int]]]:
+#     '''
+#     Not used anymore. Now erasure decoding is handled by the Gate_error_model class
+
+#     This function takes in the text form of an erasure stim circuit and output a dictionary that maps the erasure qubit index to the index of corresponding detectors
+#     It edits the string representation of the circuit to isolate error to find out which detectors one specific error flips
+#     To isolate an error, it removes all CORRELATED_ERROR and ELSE_CORRELATED_ERROR and adjusts the error rate for measurements to 0
+#     '''
     
-    # Add line numbers to each line of the circuit string
-    def append_line_numbers(input_string):
-        lines = input_string.splitlines()
-        result = []
-        for i, line in enumerate(lines, start=0):
-            line = line + f" #{i}"
-            result.append(line)
-        return "\n".join(result)
+#     # Add line numbers to each line of the circuit string
+#     def append_line_numbers(input_string):
+#         lines = input_string.splitlines()
+#         result = []
+#         for i, line in enumerate(lines, start=0):
+#             line = line + f" #{i}"
+#             result.append(line)
+#         return "\n".join(result)
 
-    erasure_circ_with_line_num = append_line_numbers(erasure_circ_text)
+#     erasure_circ_with_line_num = append_line_numbers(erasure_circ_text)
 
-    # Get information about the erasure error line number, error rates, and qubit-ancilla pair
-    # For example, a line like PAULI_CHANNEL_2(0, 0, 0, 0.005, 0, 0, 0, 0.005, 0, 0, 0, 0.005, 0, 0, 0) 2 26 16 27 11 28 14 29 9 30 18 31 3 32 17 33 12 34 15 35 10 36 19 37 #3
-    # will be matched to three components:
-    # 0, 0, 0, 0.005, 0, 0, 0, 0.005, 0, 0, 0, 0.005, 0, 0, 0
-    # 2 26 16 27 11 28 14 29 9 30 18 31 3 32 17 33 12 34 15 35 10 36 19 37
-    # 3
-    pattern = r'PAULI_CHANNEL_2\(([^)]+)\)\s+(.+?)\s*#(\d+)$'
-    lines = re.findall(pattern, erasure_circ_with_line_num, re.MULTILINE)
-    line_num_error_rates_data_ancilla_pairs = []
-    for floats, integers, line_index in lines:
-        float_list = [float(num) for num in floats.split(', ')]
-        integer_list = [[int(integers.split()[i]), int(integers.split()[i + 1])] for i in
-                        range(0, len(integers.split()), 2)]
-        line_num_error_rates_data_ancilla_pairs.append([int(line_index), float_list, integer_list])
+#     # Get information about the erasure error line number, error rates, and qubit-ancilla pair
+#     # For example, a line like PAULI_CHANNEL_2(0, 0, 0, 0.005, 0, 0, 0, 0.005, 0, 0, 0, 0.005, 0, 0, 0) 2 26 16 27 11 28 14 29 9 30 18 31 3 32 17 33 12 34 15 35 10 36 19 37 #3
+#     # will be matched to three components:
+#     # 0, 0, 0, 0.005, 0, 0, 0, 0.005, 0, 0, 0, 0.005, 0, 0, 0
+#     # 2 26 16 27 11 28 14 29 9 30 18 31 3 32 17 33 12 34 15 35 10 36 19 37
+#     # 3
+#     pattern = r'PAULI_CHANNEL_2\(([^)]+)\)\s+(.+?)\s*#(\d+)$'
+#     lines = re.findall(pattern, erasure_circ_with_line_num, re.MULTILINE)
+#     line_num_error_rates_data_ancilla_pairs = []
+#     for floats, integers, line_index in lines:
+#         float_list = [float(num) for num in floats.split(', ')]
+#         integer_list = [[int(integers.split()[i]), int(integers.split()[i + 1])] for i in
+#                         range(0, len(integers.split()), 2)]
+#         line_num_error_rates_data_ancilla_pairs.append([int(line_index), float_list, integer_list])
 
-    # organize the correspondance between which data qubit have error, when, and associated with which ancilla
-    data_qubit_ancilla_line_number = []
-    erasure_line_numbers = []
-    for r in line_num_error_rates_data_ancilla_pairs:
-        erasure_line_numbers.append(r[0])
-        for pair in r[2]:
-            data_qubit_ancilla_line_number.append([pair[0], pair[1], r[0]])  # [data index, ancilla index, line number]
+#     # organize the correspondance between which data qubit have error, when, and associated with which ancilla
+#     data_qubit_ancilla_line_number = []
+#     erasure_line_numbers = []
+#     for r in line_num_error_rates_data_ancilla_pairs:
+#         erasure_line_numbers.append(r[0])
+#         for pair in r[2]:
+#             data_qubit_ancilla_line_number.append([pair[0], pair[1], r[0]])  # [data index, ancilla index, line number]
 
-    def delete_irrelavent_error_lines(match):
-        index = int(match.group(1))
-        if index in indices_to_delete:
-            return ''
-        else: # I don't know why I wrote this else. Theoratically the line index should always be in indices_to_delete.
-            return match.group(0)
+#     def delete_irrelavent_error_lines(match):
+#         index = int(match.group(1))
+#         if index in indices_to_delete:
+#             return ''
+#         else: # I don't know why I wrote this else. Theoratically the line index should always be in indices_to_delete.
+#             return match.group(0)
 
-    ancilla_to_detectors = {}
-    for single_erasure in data_qubit_ancilla_line_number:
-        # isolate the error and increase probability to 1
-        line_num = single_erasure[2]
-        data_qubit_index = single_erasure[0]
-        ancilla_qubit_index = single_erasure[1]
-        error_rate = 1
-        replacement_line_pattern = r'PAULI_CHANNEL_2\([^)]+\)\s+[^#]+#{}\n'.format(line_num)
-        indices = []
-        for basis in ['X', 'Z']:
-            replacement = '{}_ERROR({}) {}\n'.format(basis, error_rate, data_qubit_index)
-            single_error_replaced = re.sub(replacement_line_pattern, replacement, erasure_circ_with_line_num)
+#     ancilla_to_detectors = {}
+#     for single_erasure in data_qubit_ancilla_line_number:
+#         # isolate the error and increase probability to 1
+#         line_num = single_erasure[2]
+#         data_qubit_index = single_erasure[0]
+#         ancilla_qubit_index = single_erasure[1]
+#         error_rate = 1
+#         replacement_line_pattern = r'PAULI_CHANNEL_2\([^)]+\)\s+[^#]+#{}\n'.format(line_num)
+#         indices = []
+#         for basis in ['X', 'Z']:
+#             replacement = '{}_ERROR({}) {}\n'.format(basis, error_rate, data_qubit_index)
+#             single_error_replaced = re.sub(replacement_line_pattern, replacement, erasure_circ_with_line_num)
 
-            # Delete all other detectable erasure errors
-            indices_to_delete = erasure_line_numbers.copy()
-            indices_to_delete.remove(line_num)
-            delete_pattern = r'PAULI_CHANNEL_2\([^)]+\)\s+[^#]+\s*#(\d+)\n'
-            erasure_error_deleted = re.sub(delete_pattern, delete_irrelavent_error_lines, single_error_replaced)
-            noisy_measurement_pattern = r'M\(\d+(\.\d+)?\)'
-            noisy_measurement_replacement = 'M(0)'
-            single_error_isolated = re.sub(noisy_measurement_pattern, noisy_measurement_replacement,
-                                           erasure_error_deleted)
-            isolated_error_circ = stim.Circuit()
-            isolated_error_circ.append_from_stim_program_text(single_error_isolated)
-            sample = isolated_error_circ.compile_detector_sampler().sample(1)[0]
-            this_shot_detectors_flagged = np.where(sample)[0].tolist()
-            indices.append(this_shot_detectors_flagged)
-        ancilla_to_detectors[ancilla_qubit_index] = indices
-    return ancilla_to_detectors
+#             # Delete all other detectable erasure errors
+#             indices_to_delete = erasure_line_numbers.copy()
+#             indices_to_delete.remove(line_num)
+#             delete_pattern = r'PAULI_CHANNEL_2\([^)]+\)\s+[^#]+\s*#(\d+)\n'
+#             erasure_error_deleted = re.sub(delete_pattern, delete_irrelavent_error_lines, single_error_replaced)
+#             noisy_measurement_pattern = r'M\(\d+(\.\d+)?\)'
+#             noisy_measurement_replacement = 'M(0)'
+#             single_error_isolated = re.sub(noisy_measurement_pattern, noisy_measurement_replacement,
+#                                            erasure_error_deleted)
+#             isolated_error_circ = stim.Circuit()
+#             isolated_error_circ.append_from_stim_program_text(single_error_isolated)
+#             sample = isolated_error_circ.compile_detector_sampler().sample(1)[0]
+#             this_shot_detectors_flagged = np.where(sample)[0].tolist()
+#             indices.append(this_shot_detectors_flagged)
+#         ancilla_to_detectors[ancilla_qubit_index] = indices
+#     return ancilla_to_detectors
