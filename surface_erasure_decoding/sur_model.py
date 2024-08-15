@@ -57,7 +57,8 @@ class Error_mechanism:
     When used in gen_dynamic_circuit, the contidional arithmatically summed probabilities are used, and without implementing heralding
 
     It is made up of a continuous chunk of CORRELATED_ERROR and ELSE_CORRELATED_ERRORs. 
-    The parameters used in CORRELATED_ERROR and ELSE_CORRELATED_ERRORs are different from what's seen here. See documentation of stim.
+    The parameters used in CORRELATED_ERROR and ELSE_CORRELATED_ERRORs are different from what's given to an Error_mechanism. 
+        Error_mechanism converts those probabilities to the type used by CORRELATED_ERROR and ELSE_CORRELATED_ERRORs. See documentation of stim.
     """
     list_of_MQE: Optional[List[MQE]]
     ancilla_tracker_instance: Optional[Ancilla_tracker] = None
@@ -227,6 +228,9 @@ class Error_mechanism:
     def get_dynamic_instruction_vectorized(self,
                                            qubits:List[int]):
         """
+        This function is a newer implementation of generating instructions with posterior probabilities. 
+        The vectorization is over a batch of operations. For example, rather than doing one CNOT at a time, this vectorized method 
+            generates one batch of CNOT instructions at a time.
         Accept qubits in the style of stim instructions, len(qubits) == integer multiple of self.num_qubits
         """
         assert len(qubits) % self.num_qubits == 0, "wrong number of qubits"

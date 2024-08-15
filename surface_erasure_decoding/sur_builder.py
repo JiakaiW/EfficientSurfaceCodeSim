@@ -428,12 +428,6 @@ class easure_circ_builder:
         self.dummy_matching_L = DEM_to_Matching(self.dummy_dem,curve = 'L')
         self.dummy_matching_S = DEM_to_Matching(self.dummy_dem,curve = 'S')
 
-
-    def gen_normal_circuit(self):
-        # The normal circuit is only used to generate the static DEM which is then modified by the "naive" or 'Z' decoding method.
-        self.normal_circuit = stim.Circuit()
-        self.gen_circuit(self.normal_circuit, mode = 'normal')
-
     def gen_erasure_conversion_circuit(self):
         # erasure_circuit is used to sample measurement samples which we do decoding on
         self.tracker = Ancilla_tracker(self.first_erasure_ancilla_index)
@@ -444,6 +438,12 @@ class easure_circ_builder:
     
         self.gen_circuit(self.erasure_circuit, mode = 'erasure')
         self.erasure_circuit.append("MZ", self.tracker.bare_list_of_ancillas)  # Measure the virtual erasure ancilla qubits
+
+
+    def gen_normal_circuit(self):
+        # The normal circuit is only used to generate the static DEM which is then modified by the "naive" or 'Z' decoding method.
+        self.normal_circuit = stim.Circuit()
+        self.gen_circuit(self.normal_circuit, mode = 'normal')
 
     def gen_dynamic_circuit(self,single_measurement_sample):
         assert len(single_measurement_sample) == self.erasure_circuit.num_measurements 
