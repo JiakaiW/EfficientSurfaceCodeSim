@@ -1,7 +1,18 @@
-from dataclasses import dataclass
-from typing import List, Union, Tuple, Optional
+from dataclasses import dataclass, field
+from typing import List, Union, Tuple, Optional, Iterable
 import stim
 import numpy as np
+from abc import ABC, abstractmethod
+from itertools import islice
+
+def chunked(iterable, chunk_size):
+    """Yield successive n-sized chunks from the input iterable."""
+    it = iter(iterable)
+    while True:
+        chunk = list(islice(it, chunk_size))
+        if not chunk:
+            break
+        yield chunk
 
 class Ancilla_tracker:
     def __init__(self, first_ancilla_qubit_index) -> None:
@@ -22,6 +33,7 @@ Etype_to_stim_target_fun = {
     'Z': stim.target_z,
 }
 
+
 @dataclass
 class SQE: #stands for Single_qubit_error/event
     """
@@ -31,7 +43,6 @@ class SQE: #stands for Single_qubit_error/event
     heralded: bool
     def __post_init__(self):
         assert self.type in ['I','X','Y','Z'] 
-
 
 @dataclass
 class MQE: #stands for Multi_qubit_error/event
@@ -43,47 +54,77 @@ class MQE: #stands for Multi_qubit_error/event
     def __post_init__(self):
         assert self.p >= 0, "can't create an event with below 0 probability?"
 
-    
-
 @dataclass
-class Error_mechanism:
-    """
-    A Gate_error_mechanism constitutes multiple MQEs, can describe the intrinsic error or the erasure conversion of the gate.
-    This class specify some error events with *disjoint* probabilities. 
-    The MQEs are disjoint because it's good enough approximation to neglect events where multiple MQEs happening at the same time.
-    It also specify which error events can be heralded, and herald rate.
+class InstructionVectorizer(ABC):
+    list_of_MQE: List[MQE]
 
-    When used in gen_erasure_conversion_circuit, the error model is fully implemented
-    When used in gen_normal_circuit, the error model is used without implementing heralding (operator on the last (or last two) relative qubit index is neglected)
-    When used in gen_dynamic_circuit, the contidional arithmatically summed probabilities are used, and without implementing heralding
-
-    It is made up of a continuous chunk of CORRELATED_ERROR and ELSE_CORRELATED_ERRORs. 
-    The parameters used in CORRELATED_ERROR and ELSE_CORRELATED_ERRORs are different from what's given to an Error_mechanism. 
-        Error_mechanism converts those probabilities to the type used by CORRELATED_ERROR and ELSE_CORRELATED_ERRORs. See documentation of stim.
-    """
-    list_of_MQE: Optional[List[MQE]]
-    ancilla_tracker_instance: Optional[Ancilla_tracker] = None
-    erasure_measurement_index_in_list: Optional[int] = None
-    single_measurement_sample:  Optional[Union[List,np.array]] = None
-    _herald_check_cache: bool = None
     def __post_init__(self):
-  
         sum_of_prob = sum([mqe.p for mqe in self.list_of_MQE])
         assert  sum_of_prob > 1-1e-7 and sum_of_prob < 1+ 1e-7
-
         self.num_qubits = len(self.list_of_MQE[0].list_of_SQE) # the number of data qubits it describes
         assert all(len(mqe.list_of_SQE) == self.num_qubits for mqe in self.list_of_MQE) # Ensure the error model describes errors on a fixed amount of data qubits
 
-        self.list_of_MQE = sorted(self.list_of_MQE,reverse=True, key=lambda x: x.p)
-        # convert the probabilities to those used in CORRELATED_ERROR and ELSE_CORRELATED_ERRORs
-        self.stepwise_probabilities = []
-        prob_left = 1
-        for event in self.list_of_MQE:
-            stepwise_p = event.p / prob_left
-            stepwise_p= max(min(stepwise_p, 1), 0)
-            self.stepwise_probabilities.append(stepwise_p)
-            prob_left -= event.p
-            
+    @abstractmethod
+    def get_instruction(self, qubits:List[int]) -> List:
+        pass   
+
+@dataclass
+class NormalInstructionVectorizer(InstructionVectorizer):
+    instruction_name: Optional[str] = field(default=None)
+    instruction_arg: Union[float, Iterable[float]] = field(default=None)
+    vectorizable: Optional[bool]
+
+    def __post_init__(self):
+        super().__post_init__()
+        if  self.instruction_name == None or self.instruction_arg == None:
+            self.vectorizable = False
+
+            # Convert the probabilities to those used in CORRELATED_ERROR and ELSE_CORRELATED_ERRORs (used for non-vectorized methods only, which are Deprecated)
+            self.list_of_MQE = sorted(self.list_of_MQE,reverse=True, key=lambda x: x.p)
+            self.stepwise_probabilities = []
+            prob_left = 1
+            for event in self.list_of_MQE:
+                stepwise_p = event.p / prob_left
+                stepwise_p= max(min(stepwise_p, 1), 0)
+                self.stepwise_probabilities.append(stepwise_p)
+                prob_left -= event.p
+        else:
+            self.vectorizable = True
+
+    def get_instruction(self, qubits:List[int]) -> List:
+        assert len(qubits) % self.num_qubits == 0, "wrong number of qubits"
+        if self.vectorizable:
+            list_of_args = []
+            list_of_args.append([self.instruction_name,qubits,self.instruction_arg])
+            return list_of_args
+        else:
+            list_of_args_gathered = []
+            for sets_of_qubits in chunked(iterable=qubits, chunk_size = self.num_qubits):
+                list_of_args = []
+                for mqe, stepwise_p in zip(self.list_of_MQE,self.stepwise_probabilities):
+                    targets = []
+                    for sqe,qubit in zip(mqe.list_of_SQE, sets_of_qubits):# the len of qubits can be smaller than len of event.list_of_Etype, but the smallest len count will determin how many iterations are run in zip()
+                        if sqe.type != 'I':
+                            targets.append(Etype_to_stim_target_fun[sqe.type](qubit))
+                    list_of_args.append(["ELSE_CORRELATED_ERROR",targets,stepwise_p])
+                list_of_args[0][0] = "CORRELATED_ERROR"
+                list_of_args_gathered.extend(list_of_args)
+            return list_of_args_gathered   
+
+@dataclass
+class ErasureInstructionVectorizer(InstructionVectorizer):
+    def __post_init__(self):
+        super().__post_init__()
+
+    def get_instruction(self, qubits:List[int]) -> List:
+        pass   
+
+@dataclass
+class DynamicInstructionVectorizer(InstructionVectorizer):
+    def __post_init__(self):
+        super().__post_init__()
+
+        # Prepare conditional probabilities for decoding erasure detection 
         # compute the arithmatic sum of I/X/Y/Z error rates over num_qubits qubits (using the sum without heralding in normal circuit is the same as using the *disjoint* components without heralding)
         #   also compute the sum of heralded pauli errors for num_qubits qubits
         self.Etype_to_sum = [None] * self.num_qubits
@@ -126,7 +167,92 @@ class Error_mechanism:
         self.heralded_locations_one_hot_encoding  = [prob > 0 for prob in self.p_herald]
         self.herald_locations = np.where(self.heralded_locations_one_hot_encoding)[0]
         self.num_herald_locations = np.sum(self.heralded_locations_one_hot_encoding)
-        if sum(self.p_herald) == 0:
+
+    def get_instruction(self,qubits:List[int],erasure_measurement_index_in_list) -> List:
+        assert len(qubits) % self.num_qubits == 0, "wrong number of qubits"
+        data_qubits_array = np.array(qubits).reshape(self.num_qubits,-1) # TODO: this might be related to the ordering issue
+
+        if self.num_herald_locations > 0:
+            num_ops = data_qubits_array.shape[1]
+            num_ancillas= num_ops * self.num_herald_locations
+
+            # Assign ancilla array based on self.p_herald[i] > 0?, add the number of ancilla to erasure_measurement_index_in_list[0]
+            ancilla = np.zeros(data_qubits_array.shape, dtype=int)
+            counter = erasure_measurement_index_in_list[0]
+            fill_values = np.arange(counter, counter + num_ancillas)
+            fill_values = fill_values.reshape(self.num_herald_locations,num_ops)
+            ancilla[self.herald_locations, :] = fill_values
+            erasure_measurement_index_in_list[0] += num_ancillas
+            
+            # Get bool array signifing erasure detection
+            erasure_meas = np.zeros(ancilla.shape, dtype=bool)
+            erasure_meas[self.herald_locations, :] = self.single_measurement_sample[ancilla[self.herald_locations, :]]
+            
+            # For each qubit location, get two conditional probabilities array or the static probability if erasure conversion not used. 
+            list_of_args = []
+            for i in range(self.num_qubits): # This looks like a loop, but this loop is at most length-2. It's still parrallized
+                if i in self.herald_locations: 
+                    converted_data_qubits = data_qubits_array[i][np.where(erasure_meas[i])[0]]
+                    no_detection_data_qubits = data_qubits_array[i][np.where(~erasure_meas[i])[0]]
+                    list_of_args.append(["PAULI_CHANNEL_1", converted_data_qubits, [self.conditional_probabilities[i][0], self.conditional_probabilities[i][1], self.conditional_probabilities[i][2]]])
+                    list_of_args.append(["PAULI_CHANNEL_1", no_detection_data_qubits, [self.conditional_probabilities[i][3], self.conditional_probabilities[i][4], self.conditional_probabilities[i][5]]])
+                else:
+                    list_of_args.append(["PAULI_CHANNEL_1", data_qubits_array[i], [self.Etype_to_sum[i]['X'], self.Etype_to_sum[i]['Y'], self.Etype_to_sum[i]['Z']]])
+        else:
+            list_of_args = []
+            for i in range(self.num_qubits):
+                list_of_args.append(["PAULI_CHANNEL_1", data_qubits_array[i], [self.Etype_to_sum[i]['X'], self.Etype_to_sum[i]['Y'], self.Etype_to_sum[i]['Z']]])
+        return list_of_args   
+    
+@dataclass
+class DeterministicInstructionVectorizer(InstructionVectorizer):
+    def get_instruction(self, qubits: Union[List[int], Tuple[int]]) -> List:
+        pass   
+
+@dataclass
+class Error_mechanism:
+    """
+    A Gate_error_mechanism constitutes multiple MQEs, can describe the intrinsic error or the erasure conversion of the gate.
+    This class specify some error events with *disjoint* probabilities. 
+    The MQEs are disjoint because it's good enough approximation to neglect events where multiple MQEs happening at the same time.
+    It also specify which error events can be heralded, and herald rate.
+
+    When used in gen_erasure_conversion_circuit, the error model is fully implemented
+    When used in gen_normal_circuit, the error model is used without implementing heralding (operator on the last (or last two) relative qubit index is neglected)
+    When used in gen_dynamic_circuit, the contidional arithmatically summed probabilities are used, and without implementing heralding
+
+    It is made up of a continuous chunk of CORRELATED_ERROR and ELSE_CORRELATED_ERRORs. 
+    The parameters used in CORRELATED_ERROR and ELSE_CORRELATED_ERRORs are different from what's given to an Error_mechanism. 
+        Error_mechanism converts those probabilities to the type used by CORRELATED_ERROR and ELSE_CORRELATED_ERRORs. See documentation of stim.
+
+
+
+    Vectorization:
+        different modes have different vectorization rules.
+        | Type              | normal mode               |   erasure mode                |   dynamic mode            |   deterministic mode      |
+        |-------------------|---------------------------|-------------------------------|---------------------------|---------------------------|
+        |1-q nonherald      |Error,q,param              |Error,q,param                  |Error,q,param              |Error,q,param'             |
+        |1-q herald         |Error,q,param              |PAULI_CHANNEL_2,[q,a],param    |PAULI_CHANNEL_1,q,param'   |PAULI_CHANNEL_2,q,param'   |
+        |2-q nonherald      |Error,[q,p],param          |Error,[q,p],param              |Error,[q,p],param          |Error,[q,p],param'         |
+        |2-q herald         |Error,[q,p],param          |PAULI_CHANNEL_2,[q,a],param *2 |PAULI_CHANNEL_1,q,param'*2 |PAULI_CHANNEL_2,[q,p],param'| (there's no heralded 2-qubit errors, decompose them into 1-q heralds)
+    """
+    normal_vectorizor: NormalInstructionVectorizer
+    erasure_vectorizor: ErasureInstructionVectorizer
+    dynamic_vectorizor: DynamicInstructionVectorizer
+    deterministic_vectorizor: DeterministicInstructionVectorizer
+    list_of_MQE: Optional[List[MQE]]
+    ancilla_tracker_instance: Optional[Ancilla_tracker] = None
+    erasure_measurement_index_in_list: Optional[int] = None
+    single_measurement_sample:  Optional[Union[List,np.array]] = None
+    def __post_init__(self):
+        
+        # Step-1 General sanity checks
+        sum_of_prob = sum([mqe.p for mqe in self.list_of_MQE])
+        assert  sum_of_prob > 1-1e-7 and sum_of_prob < 1+ 1e-7
+        self.num_qubits = len(self.list_of_MQE[0].list_of_SQE) # the number of data qubits it describes
+        assert all(len(mqe.list_of_SQE) == self.num_qubits for mqe in self.list_of_MQE) # Ensure the error model describes errors on a fixed amount of data qubits
+
+        if sum(self.dynamic_vectorizor.p_herald) == 0:
             self.is_erasure = False
         else:
             self.is_erasure = True
@@ -136,10 +262,26 @@ class Error_mechanism:
                         mode:str):
         '''
         return list of args that can be used in  stim.circuit.append()
-        '''
-        assert self.num_qubits == len(qubits), f"supposed to take in {self.num_qubits} qubits, but took in {qubits}"
 
-        if mode == 'normal':
+        This function is a newer implementation of generating instructions with posterior probabilities. 
+        The vectorization is over a batch of operations. For example, rather than doing one CNOT at a time, this vectorized method 
+            generates one batch of CNOT instructions at a time.
+        Accept qubits in the style of stim instructions, len(qubits) == integer multiple of self.num_qubits
+
+
+        Each column of data_qubits_array has length num_qubits
+        It's like 
+         array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
+
+        # TODO: Somehow the line below leads to incorrect erasure measurement index. 
+        # I think the original line makes sense but it doesn't work
+        # fill_values = fill_values.reshape(num_ops, self.num_herald_locations).T # original
+        fill_values = fill_values.reshape( self.num_herald_locations,num_ops) # What works
+        '''
+        
+
+        if mode == 'normal': 
             list_of_args = []
             for mqe, stepwise_p in zip(self.list_of_MQE,self.stepwise_probabilities):
                 targets = []
@@ -153,12 +295,15 @@ class Error_mechanism:
         elif mode == 'erasure':
             assert type(self.ancilla_tracker_instance) == Ancilla_tracker, "ancilla tracker not assigned"
             
+            # Step-1 assign ancillas
             ancillas = []
             for i in range(len(qubits)):
                 if self.p_herald[i] > 0:
                     ancillas.append(self.ancilla_tracker_instance.assign_ancilla(self.Etype_to_sum[i]['X'],self.Etype_to_sum[i]['Y'],self.Etype_to_sum[i]['Z']))
                 else: # Attention: in erasure mode it does not assign ancilla to qubit unless that qubit has possitive herald probability
                     ancillas.append(None)
+
+            # Step-2 append instructions
             list_of_args = []
             for mqe, stepwise_p in zip(self.list_of_MQE,self.stepwise_probabilities):
                 targets = []
@@ -173,31 +318,21 @@ class Error_mechanism:
         else:
             raise Exception("unsupported mode")
 
+
     def get_erasure_instruction_vectorized(self,
                                            qubits:List[int]):
-        """
-        This function is a newer implementation of generating instructions with posterior probabilities. 
-        The vectorization is over a batch of operations. For example, rather than doing one CNOT at a time, this vectorized method 
-            generates one batch of CNOT instructions at a time.
-        Accept qubits in the style of stim instructions, len(qubits) == integer multiple of self.num_qubits
-        """
         assert len(qubits) % self.num_qubits == 0, "wrong number of qubits"
         data_qubits_array = np.array(qubits).reshape(self.num_qubits,-1) # here it refers to non-erasure-virtual-flag qubits
-        # Each column of data_qubits_array has length num_qubits
-        # It's like 
-        #  array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        #        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
+
         if self.num_herald_locations > 0:
             num_ops = data_qubits_array.shape[1]
             num_ancillas= num_ops * self.num_herald_locations
+            
             # Assign ancilla array based on self.p_herald[i] > 0?, add the number of ancilla to self.erasure_measurement_index_in_list[0]
             ancilla = np.zeros(data_qubits_array.shape, dtype=int)
             counter = self.erasure_measurement_index_in_list[0]
             fill_values = np.arange(counter, counter + num_ancillas)
-            # TODO: Somehow the line below leads to incorrect erasure measurement index. 
-            # I think the original line makes sense but it doesn't work
-            # fill_values = fill_values.reshape(num_ops, self.num_herald_locations).T # original
-            fill_values = fill_values.reshape( self.num_herald_locations,num_ops) # What works
+            fill_values = fill_values.reshape( self.num_herald_locations,num_ops)
             ancilla[self.herald_locations, :] = fill_values
             self.erasure_measurement_index_in_list[0] += num_ancillas
             
@@ -221,62 +356,11 @@ class Error_mechanism:
                 list_of_args.append(["PAULI_CHANNEL_1", data_qubits_array[i], [self.Etype_to_sum[i]['X'], self.Etype_to_sum[i]['Y'], self.Etype_to_sum[i]['Z']]])
         return list_of_args
     
-    def get_dynamic_instruction_vectorized(self,
-                                           qubits:List[int]):
-        """
-        This function is a newer implementation of generating instructions with posterior probabilities. 
-        The vectorization is over a batch of operations. For example, rather than doing one CNOT at a time, this vectorized method 
-            generates one batch of CNOT instructions at a time.
-        Accept qubits in the style of stim instructions, len(qubits) == integer multiple of self.num_qubits
-        """
-        assert len(qubits) % self.num_qubits == 0, "wrong number of qubits"
-        data_qubits_array = np.array(qubits).reshape(self.num_qubits,-1)
-        # Each column of data_qubits_array has length num_qubits
-        # It's like 
-        #  array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        #        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
-        if self.num_herald_locations > 0:
-            num_ops = data_qubits_array.shape[1]
-            num_ancillas= num_ops * self.num_herald_locations
-            # Assign ancilla array based on self.p_herald[i] > 0?, add the number of ancilla to self.erasure_measurement_index_in_list[0]
-            ancilla = np.zeros(data_qubits_array.shape, dtype=int)
-            counter = self.erasure_measurement_index_in_list[0]
-            fill_values = np.arange(counter, counter + num_ancillas)
-            # TODO: Somehow the line below leads to incorrect erasure measurement index. 
-            # I think the original line makes sense but it doesn't work
-            # fill_values = fill_values.reshape(num_ops, self.num_herald_locations).T # original
-            fill_values = fill_values.reshape( self.num_herald_locations,num_ops) # What works
-            ancilla[self.herald_locations, :] = fill_values
-            self.erasure_measurement_index_in_list[0] += num_ancillas
-            
-            # Get bool array signifing erasure detection
-            erasure_meas = np.zeros(ancilla.shape, dtype=bool)
-            erasure_meas[self.herald_locations, :] = self.single_measurement_sample[ancilla[self.herald_locations, :]]
-            
-            # For each qubit location, get two conditional probabilities array or the static probability if erasure conversion not used. 
-            list_of_args = []
-            for i in range(self.num_qubits): # This looks like a loop, but this loop is at most length-2. It's still parrallized
-                if i in self.herald_locations: 
-                    converted_data_qubits = data_qubits_array[i][np.where(erasure_meas[i])[0]]
-                    no_detection_data_qubits = data_qubits_array[i][np.where(~erasure_meas[i])[0]]
-                    list_of_args.append(["PAULI_CHANNEL_1", converted_data_qubits, [self.conditional_probabilities[i][0], self.conditional_probabilities[i][1], self.conditional_probabilities[i][2]]])
-                    list_of_args.append(["PAULI_CHANNEL_1", no_detection_data_qubits, [self.conditional_probabilities[i][3], self.conditional_probabilities[i][4], self.conditional_probabilities[i][5]]])
-                else:
-                    list_of_args.append(["PAULI_CHANNEL_1", data_qubits_array[i], [self.Etype_to_sum[i]['X'], self.Etype_to_sum[i]['Y'], self.Etype_to_sum[i]['Z']]])
-        else:
-            list_of_args = []
-            for i in range(self.num_qubits):
-                list_of_args.append(["PAULI_CHANNEL_1", data_qubits_array[i], [self.Etype_to_sum[i]['X'], self.Etype_to_sum[i]['Y'], self.Etype_to_sum[i]['Z']]])
-        return list_of_args
+    def get_dynamic_instruction_vectorized(self,qubits:List[int]):
+        return self.dynamic_vectorizor.get_instruction(qubits)
     
     def get_deterministic_instruction_vectorized(self,
                                            qubits:List[int]):
-        """
-        Used in importance sampling
-        This function is similar to get_dynamic_instruction_vectorized. It is used to generate batch of operations with error rates dependent on pre-computed results. 
-
-        In addition to 
-        """
         pass
 
     def __repr__(self):
@@ -307,6 +391,9 @@ class Gate_error_model:
             
         assert all([mechanism.num_qubits == self.list_of_mechanisms[0].num_qubits for mechanism in self.list_of_mechanisms])
         assert sum([mechanism.is_erasure for mechanism in self.list_of_mechanisms]) <= 1
+
+    
+    
     def set_ancilla_tracker_instance(self,ancilla_tracker_instance: Ancilla_tracker):
         for mechanism in self.list_of_mechanisms:
             mechanism.ancilla_tracker_instance = ancilla_tracker_instance
@@ -316,6 +403,7 @@ class Gate_error_model:
     def set_single_measurement_sample(self,single_measurement_sample: Union[List,np.array]):
         for mechanism in self.list_of_mechanisms:
             mechanism.single_measurement_sample = single_measurement_sample
+    
     def get_instruction(self, 
                         qubits: Union[List[int], Tuple[int]],
                         mode:str):
@@ -343,49 +431,13 @@ class Gate_error_model:
             
         return  s
 
-def product_of_sigma(s1,s2):
-    assert s1 in ['X','Y','Z','I'] and s2 in ['X','Y','Z','I']
-    return {
-        ('I','I'):'I',
-        ('I','X'):'X',
-        ('I','Y'):'Y',
-        ('I','Z'):'Z',
-
-        ('X','I'):'X',
-        ('X','X'):'I',
-        ('X','Y'):'Z',
-        ('X','Z'):'Y',
-
-        ('Y','I'):'Y',
-        ('Y','X'):'Z',
-        ('Y','Y'):'I',
-        ('Y','Z'):'X',
-
-        ('Z','I'):'Z',
-        ('Z','X'):'Y',
-        ('Z','Y'):'X',
-        ('Z','Z'):'I',
-    }[(s1,s2)]
-
-def error_mechanism_product(m1:Error_mechanism,m2:Error_mechanism) -> Error_mechanism:
-    # Not used anymore, better use a Gate_error_model to represent two independent mechanisms
-    num_qubits = m1.num_qubits
-    assert num_qubits == m2.num_qubits
-    product_list_of_MQE = []
-    for event1 in m1.list_of_MQE:
-        for event2 in m2.list_of_MQE:
-            list_of_SQE = []
-            for i in range(num_qubits):
-                list_of_SQE.append(SQE(type=product_of_sigma(event1.list_of_SQE[i].type,event2.list_of_SQE[i].type),
-                                       heralded=any([event1.list_of_SQE[i].heralded,event2.list_of_SQE[i].heralded])))
-            product_list_of_MQE.append(MQE(event1.p * event2.p,list_of_SQE) )
-    return Error_mechanism(list_of_MQE=product_list_of_MQE)
-
 
 
 
 def get_1q_depolarization_mechanism(p_p):
     return Error_mechanism(
+        vectorization= ('DEPOLARIZE1',p_p),
+        list_of_MQE= 
         [   MQE(1-p_p,[SQE("I",False)]),
             MQE(p_p/3,[SQE("X",False)]),
             MQE(p_p/3,[SQE("Y",False)]),
@@ -393,8 +445,51 @@ def get_1q_depolarization_mechanism(p_p):
         ]
     )
 
+def get_1q_differential_shift_mechanism(p_z_shift):
+    return Error_mechanism(
+        vectorization= ('Z_ERROR',p_z_shift),
+        list_of_MQE= 
+        [   
+            MQE(1-p_z_shift,[SQE("I",False)]),
+            MQE(p_z_shift,[SQE("Z",False)])
+        ]
+)
+
+def get_1q_biased_erasure_mechanism(p_e):
+    return Error_mechanism(
+        vectorization= ("PAULI_CHANNEL_2", [i, ancilla], [
+                  # ix iy iz
+                    p_e / 2, 0, 0,
+                  # xi xx xy xz
+                    0, 0, 0, 0,
+                  # yi yx yy yz
+                    0, 0, 0, 0,
+                  # zi zx zy zz
+                    0, p_e / 2, 0, 0
+                ]),
+        list_of_MQE= 
+        [   
+            MQE(1 - p_e,[SQE("I",False)]),
+            MQE(p_e/2,[SQE("I",True)]),
+            MQE(p_e/2,[SQE("Z",True)])
+        ]
+)
+
+def get_1q_error_model(p_e,p_z_shift, p_p):
+    mechanism_list = [get_1q_depolarization_mechanism(p_p)]
+    if p_z_shift>0:
+        mechanism_list.append(get_1q_differential_shift_mechanism(p_z_shift))
+    if p_e>0:
+        mechanism_list.append(get_1q_biased_erasure_mechanism(p_e))
+    return Gate_error_model(mechanism_list)
+
+
+
+
 def get_2q_depolarization_mechanism(p_p):
     return Error_mechanism(
+        vectorization= ('DEPOLARIZE2',p_p),
+        list_of_MQE= 
         [   MQE(1-p_p,[SQE("I",False),SQE("I",False)]),
 
             MQE(p_p/15,[SQE("I",False),SQE("X",False)]),
@@ -418,36 +513,14 @@ def get_2q_depolarization_mechanism(p_p):
         ]
     )
 
-def get_1q_biased_erasure_with_differential_shift_mechanism(p_e,p_z_shift):
+
+def get_2q_biased_erasure_mechanism(p_e):
     return Error_mechanism(
     [   
-        MQE((1 - p_e )* (1-p_z_shift),[SQE("I",False)]),
-        MQE((1 - p_e )* p_z_shift,[SQE("Z",False)]),
-        MQE(p_e/2,[SQE("I",True)]),
-        MQE(p_e/2,[SQE("Z",True)])
-    ]
-)
-
-def get_1q_error_model(p_e,p_z_shift, p_p):
-    return Gate_error_model([get_1q_biased_erasure_with_differential_shift_mechanism(p_e,p_z_shift),
-                             get_1q_depolarization_mechanism(p_p)])
-
-
-def get_2q_biased_erasure_with_differential_shift_mechanism(p_e,p_z_shift):
-    '''
-    p_z_shift is the probability of undetectible Z error given not detecting erasure.
-    '''
-    return Error_mechanism(
-    [   
-        MQE((1- p_e)**2 * (1-p_z_shift)**2,[SQE("I",False),SQE("I",False)]), # no detection cases
-
-        MQE((1- p_e)**2 * p_z_shift * (1-p_z_shift),[SQE("Z",False),SQE("I",False)]),# differential shift on computational subspace
-        MQE((1- p_e)**2 * p_z_shift * (1-p_z_shift),[SQE("I",False),SQE("Z",False)]),
-        MQE((1- p_e)**2 * p_z_shift**2,[SQE("Z",False),SQE("Z",False)]),
+        MQE((1- p_e)**2,[SQE("I",False),SQE("I",False)]), # no detection cases
 
         MQE(p_e/2 * (1- p_e),[SQE("I",True),SQE("I",False)]), # Single qubit detection cases
         MQE(p_e/2 * (1- p_e),[SQE("Z",True),SQE("I",False)]),
-
         MQE((1- p_e) * p_e/2,[SQE("I",False),SQE("I",True)]),
         MQE((1- p_e) * p_e/2,[SQE("I",False),SQE("Z",True)]),
 
@@ -458,9 +531,62 @@ def get_2q_biased_erasure_with_differential_shift_mechanism(p_e,p_z_shift):
     ]
 )
 
-
+def get_2q_differential_shift_mechanism(p_z_shift):
+    return Error_mechanism(
+    [   
+        MQE((1-p_z_shift)**2,[SQE("I",False),SQE("I",False)]),
+        MQE(p_z_shift * (1-p_z_shift),[SQE("Z",False),SQE("I",False)]),
+        MQE(p_z_shift * (1-p_z_shift),[SQE("I",False),SQE("Z",False)]),
+        MQE(p_z_shift**2,[SQE("Z",False),SQE("Z",False)]),
+    ]
+)
 
 def get_2q_error_model(p_e,p_z_shift, p_p):
-    return Gate_error_model([get_2q_biased_erasure_with_differential_shift_mechanism(p_e,p_z_shift),get_2q_depolarization_mechanism(p_p)])
+    mechanism_list = [get_2q_depolarization_mechanism(p_p)]
+    if p_z_shift>0:
+        mechanism_list.append(get_2q_differential_shift_mechanism(p_z_shift))
+    if p_e>0:
+        mechanism_list.append(get_2q_biased_erasure_mechanism(p_e))
+    return Gate_error_model(mechanism_list)
 
+
+
+
+# def product_of_sigma(s1,s2):
+#     assert s1 in ['X','Y','Z','I'] and s2 in ['X','Y','Z','I']
+#     return {
+#         ('I','I'):'I',
+#         ('I','X'):'X',
+#         ('I','Y'):'Y',
+#         ('I','Z'):'Z',
+
+#         ('X','I'):'X',
+#         ('X','X'):'I',
+#         ('X','Y'):'Z',
+#         ('X','Z'):'Y',
+
+#         ('Y','I'):'Y',
+#         ('Y','X'):'Z',
+#         ('Y','Y'):'I',
+#         ('Y','Z'):'X',
+
+#         ('Z','I'):'Z',
+#         ('Z','X'):'Y',
+#         ('Z','Y'):'X',
+#         ('Z','Z'):'I',
+#     }[(s1,s2)]
+
+# def error_mechanism_product(m1:Error_mechanism,m2:Error_mechanism) -> Error_mechanism:
+#     # Not used anymore, better use a Gate_error_model to represent two independent mechanisms
+#     num_qubits = m1.num_qubits
+#     assert num_qubits == m2.num_qubits
+#     product_list_of_MQE = []
+#     for event1 in m1.list_of_MQE:
+#         for event2 in m2.list_of_MQE:
+#             list_of_SQE = []
+#             for i in range(num_qubits):
+#                 list_of_SQE.append(SQE(type=product_of_sigma(event1.list_of_SQE[i].type,event2.list_of_SQE[i].type),
+#                                        heralded=any([event1.list_of_SQE[i].heralded,event2.list_of_SQE[i].heralded])))
+#             product_list_of_MQE.append(MQE(event1.p * event2.p,list_of_SQE) )
+#     return Error_mechanism(list_of_MQE=product_list_of_MQE)
 
