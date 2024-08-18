@@ -16,7 +16,7 @@ import json
 import sys
 import zipfile
 import pickle
-from surface_erasure_decoding.sur_model import *
+from surface_erasure_decoding.error_model import *
 import time
 
 
@@ -401,8 +401,6 @@ class easure_circ_builder:
     erasure_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
     normal_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
     dynamic_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
-    ancilla_tracker_instance: Optional[Ancilla_tracker] = field(init=False, repr=False)
-    erasure_measurement_index_in_list: Optional[int] = field(init=False, repr=False)
     # dummy_dem: Optional[stim.DetectorErrorModel] = field(init=False, repr=False)
     # dummy_matching_L: Optional[pymatching.Matching]= field(init=False, repr=False)
     # dummy_matching_S: Optional[pymatching.Matching]= field(init=False, repr=False)
@@ -428,14 +426,16 @@ class easure_circ_builder:
 
     def gen_erasure_conversion_circuit(self):
         # erasure_circuit is used to sample measurement samples which we do decoding on
-        self.ancilla_tracker_instance = Ancilla_tracker(2*(self.distance+1)**2)
+        self.next_ancilla_qubit_index_in_list = [2*(self.distance+1)**2]
         for attr_name, attr_value in vars(self).items():
             if isinstance(attr_value, Gate_error_model):
-                attr_value.set_ancilla_tracker_instance(self.ancilla_tracker_instance)
+                attr_value.set_next_ancilla_qubit_index_in_list(self.next_ancilla_qubit_index_in_list)
         self.erasure_circuit = stim.Circuit()
     
         self.gen_circuit(self.erasure_circuit, mode = 'erasure')
-        self.erasure_circuit.append("MZ", self.ancilla_tracker_instance.bare_list_of_ancillas)  # Measure the virtual erasure ancilla qubits
+        self.erasure_circuit.append("MZ", 
+                                    np.arange(2*(self.distance+1)**2, self.next_ancilla_qubit_index_in_list[0], dtype=int)
+                                    )  # Measure the virtual erasure ancilla qubits
 
 
     def gen_normal_circuit(self):
@@ -468,80 +468,54 @@ class easure_circ_builder:
                                       noisy: bool):
             circuit.append("TICK")
             if noisy and not self.before_round_error_model.trivial:
-                if mode == 'dynamic':
-                    list_of_args = self.before_round_error_model.get_dynamic_instruction_vectorized(data_qubits)
-                    for args in list_of_args:
-                        circuit.append(*args)
-                else:
-                    for qubit in data_qubits:
-                        list_of_args = self.before_round_error_model.get_instruction(qubits = [qubit],
-                                                                                    mode=mode,
-                                                                                    )
-                    for args in list_of_args:
-                        circuit.append(*args)
+                list_of_args = self.before_round_error_model.get_instruction(qubits = [data_qubits],
+                                                                            mode=mode,
+                                                                            )
+                for args in list_of_args:
+                    circuit.append(*args)
 
         def append_H(targets: List[int],
                      noisy: bool):
             circuit.append('H', targets)
             if noisy and not self.after_h_error_model.trivial:
-                if mode == 'dynamic':
-                    list_of_args = self.after_h_error_model.get_dynamic_instruction_vectorized(targets)
-                    for args in list_of_args:
-                        circuit.append(*args)
-                else:
-                    for qubit in targets:
-                        list_of_args = self.after_h_error_model.get_instruction(qubits = [qubit],
-                                                                                    mode=mode,
-                                                                                    )
-                        for args in list_of_args:
-                            circuit.append(*args)
+                list_of_args = self.after_h_error_model.get_instruction(qubits = [targets],
+                                                                            mode=mode,
+                                                                            )
+                for args in list_of_args:
+                    circuit.append(*args)
 
         def append_cnot(qubits: List[int],
                         noisy: bool):
-            control_qubits = qubits[0::2]
-            target_qubits = qubits[1::2]
-            control_target_pairs = list(zip(control_qubits,target_qubits ))
             if self.native_cx:
                 circuit.append('CNOT', qubits)
                 if noisy and not self.after_cnot_error_model.trivial:
-                    if mode == 'dynamic':
-                        list_of_args = self.after_cnot_error_model.get_dynamic_instruction_vectorized(qubits)
-                        for args in list_of_args:
-                            circuit.append(*args)
-                    else:
-                        for pairs in control_target_pairs:
-                            list_of_args = self.after_cnot_error_model.get_instruction(qubits = pairs,
-                                                                                        mode=mode,
-                                                                                        )
-                            for args in list_of_args:
-                                circuit.append(*args)
+                    list_of_args = self.after_cnot_error_model.get_instruction(qubits = qubits,
+                                                                                mode=mode,
+                                                                                )
+                    for args in list_of_args:
+                        circuit.append(*args)
             else:
+                # control_qubits = qubits[0::2]
+                target_qubits = qubits[1::2]
+                # control_target_pairs = list(zip(control_qubits,target_qubits ))
                 append_H(target_qubits, noisy=noisy)
                 append_cz(qubits, noisy=noisy)
                 append_H(target_qubits, noisy=noisy)
 
         def append_cz(qubits: List[int],
                       noisy: bool):
-            
-            control_qubits = qubits[0::2]
-            target_qubits = qubits[1::2]
-            control_target_pairs = list(zip(control_qubits,target_qubits ))
-
             if self.native_cz:
                 circuit.append('CZ', qubits)
                 if noisy and not self.after_cz_error_model.trivial:
-                    if mode == 'dynamic':
-                        list_of_args = self.after_cz_error_model.get_dynamic_instruction_vectorized(qubits)
-                        for args in list_of_args:
-                            circuit.append(*args)
-                    else:
-                        for pairs in control_target_pairs:
-                            list_of_args = self.after_cz_error_model.get_instruction(qubits = pairs,
-                                                                                        mode=mode,
-                                                                                        )
-                            for args in list_of_args:
-                                circuit.append(*args)
+                    list_of_args = self.after_cz_error_model.get_instruction(qubits = qubits,
+                                                                                mode=mode,
+                                                                                )
+                    for args in list_of_args:
+                        circuit.append(*args)
             else:
+                # control_qubits = qubits[0::2]
+                target_qubits = qubits[1::2]
+                # control_target_pairs = list(zip(control_qubits,target_qubits ))
                 append_H(target_qubits, noisy=noisy)
                 append_cnot(qubits, noisy=noisy)
                 append_H(target_qubits, noisy=noisy)
@@ -550,17 +524,11 @@ class easure_circ_builder:
             assert basis == "X" or basis == "Z", "basis must be X or Z"
             circuit.append("R" + basis, targets)
             if noisy and not self.after_reset_error_model.trivial:
-                if mode == 'dynamic':
-                    list_of_args = self.after_reset_error_model.get_dynamic_instruction_vectorized(targets)
-                    for args in list_of_args:
-                        circuit.append(*args)
-                else:
-                    for qubit in targets:
-                        list_of_args =  self.after_reset_error_model.get_instruction(qubits = [qubit],
-                                                                                    mode=mode,
-                                                                                    )
-                        for args in list_of_args:
-                            circuit.append(*args)
+                list_of_args =  self.after_reset_error_model.get_instruction(qubits = targets,
+                                                                            mode=mode,
+                                                                            )
+                for args in list_of_args:
+                    circuit.append(*args)
         def append_measure(targets: List[int], basis: str, noisy: bool):
             if noisy:
                 circuit.append("M" + basis, targets, self.measurement_error)

@@ -1,5 +1,5 @@
-from surface_erasure_decoding.sur_builder import *
-from surface_erasure_decoding.sur_model import *
+from surface_erasure_decoding.circuit_builder import *
+from surface_erasure_decoding.error_model import *
 
 import time
 
