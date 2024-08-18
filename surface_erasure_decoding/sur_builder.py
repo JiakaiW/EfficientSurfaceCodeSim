@@ -402,7 +402,6 @@ class easure_circ_builder:
     normal_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
     dynamic_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
     ancilla_tracker_instance: Optional[Ancilla_tracker] = field(init=False, repr=False)
-    first_erasure_ancilla_index: Optional[int] = field(init=False, repr=False)
     erasure_measurement_index_in_list: Optional[int] = field(init=False, repr=False)
     # dummy_dem: Optional[stim.DetectorErrorModel] = field(init=False, repr=False)
     # dummy_matching_L: Optional[pymatching.Matching]= field(init=False, repr=False)
@@ -421,7 +420,6 @@ class easure_circ_builder:
                                                           is_memory_x=self.is_memory_x,
                                                           prefer_hadamard_on_control_when_only_native_cnot_in_XZZX=self.prefer_hadamard_on_control_when_only_native_cnot_in_XZZX)
 
-        self.first_erasure_ancilla_index = 2*(self.distance+1)**2 # qubit index
         self.gen_erasure_conversion_circuit()
         self.gen_normal_circuit()
         # self.dummy_dem = self.normal_circuit.detector_error_model(approximate_disjoint_errors=True,decompose_errors=True)
@@ -430,7 +428,7 @@ class easure_circ_builder:
 
     def gen_erasure_conversion_circuit(self):
         # erasure_circuit is used to sample measurement samples which we do decoding on
-        self.ancilla_tracker_instance = Ancilla_tracker(self.first_erasure_ancilla_index)
+        self.ancilla_tracker_instance = Ancilla_tracker(2*(self.distance+1)**2)
         for attr_name, attr_value in vars(self).items():
             if isinstance(attr_value, Gate_error_model):
                 attr_value.set_ancilla_tracker_instance(self.ancilla_tracker_instance)
