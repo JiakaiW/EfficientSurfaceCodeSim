@@ -313,36 +313,6 @@ def DEM_to_Matching(model: stim.DetectorErrorModel,
                 p = p * (1 - old_p) + old_p * (1 - p)
                 g.remove_edge(*dets)
 
-        # elif erasure_handling == 'X' or erasure_handling == 'Y' or erasure_handling == 'Z' or erasure_handling == 'naive':
-        #     erasure = False
-        #     if g.has_edge(*dets):
-        #         already_erasure = g.get_edge_data(*dets)['erased']  # TODO: why doesn't this use edge_data['erasure']? This doesn't make sense, Now I changed, does it work?
-        #         if already_erasure:
-        #             return # leave it be p=1, erasure = true
-        #         else:
-        #             old_p = g.get_edge_data(*dets)["error_probability"]
-        #             p = p * (1 - old_p) + old_p * (1 - p)
-        #             g.remove_edge(*dets)
-
-        #     if erasure_handling != 'naive': #(X or Y or Z)
-        #         list_of_meas_and_error_type = detectors_to_list_of_meas.get(dets_str) #Use dict.get so it won't throw an error if key doesn't exist
-        #         if list_of_meas_and_error_type is not None:
-        #             for meas_and_error_type in list_of_meas_and_error_type:
-        #                 erasure_measurement_index = meas_and_error_type[0]
-        #                 error_type = meas_and_error_type[1]
-        #                 if single_measurement_sample[erasure_measurement_index] == 1 and (error_type == erasure_handling or erasure_handling == 'Y'):
-        #                     erasure = True
-        #                     break
-        #     else:
-        #         list_of_meas = detectors_to_list_of_meas.get(dets_str)
-        #         if list_of_meas is not None:
-        #             for meas in list_of_meas:
-        #                 if single_measurement_sample[meas] == 1:
-        #                     erasure = True
-        #                     break
-        #     if erasure:
-        #         p = 1
-
         else:
             Exception('unimplemented weight assignment method')
 
@@ -380,12 +350,12 @@ class easure_circ_builder:
     rounds: int
     distance: int
 
-    before_round_error_model: Gate_error_model  = Gate_error_model([])
-    after_h_error_model: Gate_error_model  = Gate_error_model([])
-    after_cnot_error_model: Gate_error_model  = Gate_error_model([])
-    after_cz_error_model: Gate_error_model  = Gate_error_model([])
+    before_round_error_model: GateErrorModel  = GateErrorModel([])
+    after_h_error_model: GateErrorModel  = GateErrorModel([])
+    after_cnot_error_model: GateErrorModel  = GateErrorModel([])
+    after_cz_error_model: GateErrorModel  = GateErrorModel([])
     measurement_error: float  = 0
-    after_reset_error_model: Gate_error_model  = Gate_error_model([])
+    after_reset_error_model: GateErrorModel  = GateErrorModel([])
 
     # These attributes are optional and I tend not to change them
     interaction_order: str = 'z' # Is 'clever' really better than z?
@@ -400,35 +370,28 @@ class easure_circ_builder:
     helper: Optional[rotated_surface_code_circuit_helper] = field(init=False, repr=False)
     erasure_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
     normal_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
-    dynamic_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
-    # dummy_dem: Optional[stim.DetectorErrorModel] = field(init=False, repr=False)
-    # dummy_matching_L: Optional[pymatching.Matching]= field(init=False, repr=False)
-    # dummy_matching_S: Optional[pymatching.Matching]= field(init=False, repr=False)
-
-    
-
+    posterior_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
+    deterministic_circuit: Optional[stim.Circuit] = field(init=False, repr=False)
     def __post_init__(self):
         assert(any([self.native_cz,self.native_cx]))
         # At this point an instance of this class will have all the information needed to sample and decode a particular circuit on a Node.
 
-    def generate_circuit_and_decoding_info(self):
+    def generate_helper(self):
         self.helper = rotated_surface_code_circuit_helper(rounds=self.rounds, distance=self.distance, XZZX=self.XZZX, native_cx=self.native_cx,
                                                           native_cz=self.native_cz,
                                                           interaction_order=self.interaction_order,
                                                           is_memory_x=self.is_memory_x,
                                                           prefer_hadamard_on_control_when_only_native_cnot_in_XZZX=self.prefer_hadamard_on_control_when_only_native_cnot_in_XZZX)
 
-        self.gen_erasure_conversion_circuit()
-        self.gen_normal_circuit()
-        # self.dummy_dem = self.normal_circuit.detector_error_model(approximate_disjoint_errors=True,decompose_errors=True)
-        # self.dummy_matching_L = DEM_to_Matching(self.dummy_dem,curve = 'L')
-        # self.dummy_matching_S = DEM_to_Matching(self.dummy_dem,curve = 'S')
+        # self.gen_erasure_conversion_circuit()
+        # self.gen_normal_circuit()
+
 
     def gen_erasure_conversion_circuit(self):
         # erasure_circuit is used to sample measurement samples which we do decoding on
         self.next_ancilla_qubit_index_in_list = [2*(self.distance+1)**2]
         for attr_name, attr_value in vars(self).items():
-            if isinstance(attr_value, Gate_error_model):
+            if isinstance(attr_value, GateErrorModel):
                 attr_value.set_next_ancilla_qubit_index_in_list(self.next_ancilla_qubit_index_in_list)
         self.erasure_circuit = stim.Circuit()
     
@@ -443,25 +406,31 @@ class easure_circ_builder:
         self.normal_circuit = stim.Circuit()
         self.gen_circuit(self.normal_circuit, mode = 'normal')
 
-    def gen_dynamic_circuit(self,single_measurement_sample):
+    def gen_dummy_circuit(self):
+        # The normal circuit is only used to generate the static DEM which is then modified by the "naive" or 'Z' decoding method.
+        self.dummy_circuit = stim.Circuit()
+        self.gen_circuit(self.dummy_circuit, mode = 'dummy')
+
+
+    def gen_posterior_circuit(self,single_measurement_sample):
         assert len(single_measurement_sample) == self.erasure_circuit.num_measurements 
 
         # Share a new erasure_measurement_index and the single_measurement_sample to the error models
-        self.erasure_measurement_index_in_list = [copy.deepcopy(self.normal_circuit.num_measurements)]
+        num_data_q = self.distance**2
+        num_meas_q = num_data_q-1
+        num_existing_measurement = num_meas_q*(self.rounds+1)+num_data_q
+        self.erasure_measurement_index_in_list = [num_existing_measurement]
         self.single_shot_measurement_sample_being_decoded = single_measurement_sample
         for attr_name, attr_value in vars(self).items():
-            if isinstance(attr_value, Gate_error_model):
+            if isinstance(attr_value, GateErrorModel):
                 attr_value.set_erasure_measurement_index_in_list(self.erasure_measurement_index_in_list)
                 attr_value.set_single_measurement_sample(self.single_shot_measurement_sample_being_decoded)
 
-        self.dynamic_circuit = stim.Circuit()
-
-        self.gen_circuit(self.dynamic_circuit, mode = 'dynamic')
+        self.posterior_circuit = stim.Circuit()
+        self.gen_circuit(self.posterior_circuit, mode = 'posterior')
         assert self.erasure_measurement_index_in_list[0] == self.erasure_circuit.num_measurements
-        return self.dynamic_circuit
+        return self.posterior_circuit
     
-
-
 
     def gen_circuit(self, circuit, mode):
         def append_before_round_error(data_qubits: List[int],
@@ -644,7 +613,7 @@ class easure_circ_builder:
 
     def decode_by_generate_new_circ(self,single_detector_sample,curve,single_measurement_sample):
         assert curve in ['S','L']
-        conditional_circ = self.gen_dynamic_circuit(single_measurement_sample)
+        conditional_circ = self.gen_posterior_circuit(single_measurement_sample)
         dem = conditional_circ.detector_error_model(approximate_disjoint_errors=True,decompose_errors=True)
         m = DEM_to_Matching(dem,curve = curve)
         predicted_observable = m.decode(single_detector_sample)[0]

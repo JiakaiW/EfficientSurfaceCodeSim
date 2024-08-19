@@ -1,25 +1,14 @@
-from instruction_vectorizers import *
+from surface_erasure_decoding.instruction_generators import *
 
 
 
 @dataclass
-class Error_mechanism:
+class ErrorMechanism:
     """
-    A Gate_error_mechanism constitutes multiple MQEs, can describe the intrinsic error or the erasure conversion of the gate.
+    A ErrorMechanism constitutes multiple MQEs, can describe the intrinsic error or the erasure conversion of the gate.
     This class specify some error events with *disjoint* probabilities. 
     The MQEs are disjoint because it's good enough approximation to neglect events where multiple MQEs happening at the same time.
     It also specify which error events can be heralded, and herald rate.
-
-    When used in gen_erasure_conversion_circuit, the error model is fully implemented
-    When used in gen_normal_circuit, the error model is used without implementing heralding (operator on the last (or last two) relative qubit index is neglected)
-    When used in gen_dynamic_circuit, the contidional arithmatically summed probabilities are used, and without implementing heralding
-
-    It is made up of a continuous chunk of CORRELATED_ERROR and ELSE_CORRELATED_ERRORs. 
-    The parameters used in CORRELATED_ERROR and ELSE_CORRELATED_ERRORs are different from what's given to an Error_mechanism. 
-        Error_mechanism converts those probabilities to the type used by CORRELATED_ERROR and ELSE_CORRELATED_ERRORs. See documentation of stim.
-
-
-
     Vectorization:
         different modes have different vectorization rules.
         | Type              | normal mode               |   erasure mode                |   dynamic mode            |   deterministic mode      |
@@ -29,74 +18,78 @@ class Error_mechanism:
         |2-q nonherald      |Error,[q,p],param          |Error,[q,p],param              |Error,[q,p],param          |Error,[q,p],param'         |
         |2-q herald         |Error,[q,p],param          |PAULI_CHANNEL_2,[q,a],param *2 |PAULI_CHANNEL_1,q,param'*2 |PAULI_CHANNEL_2,[q,p],param'| (there's no heralded 2-qubit errors, decompose them into 1-q heralds)
     """
-    normal_vectorizer: NormalInstructionVectorizer
-    erasure_vectorizer: Optional[ErasureInstructionVectorizer] = None
-    dynamic_vectorizer: Optional[DynamicInstructionVectorizer] = None
-    deterministic_vectorizer: Optional[DeterministicInstructionVectorizer] = None
+    normal_generator: NormalInsGenerator
+    erasure_generator: Optional[ErasureInsGenerator] = None
+    posterior_generator: Optional[PosteriorInsGenerator] = None
+    deterministic_generator: Optional[DeterministicInsGenerator] = None
+    dummy_generator: Optional[DummyInsGenerator] = None
 
     next_ancilla_qubit_index_in_list: Optional[int] = None
+
     erasure_measurement_index_in_list: Optional[int] = None
     single_measurement_sample:  Optional[Union[List,np.array]] = None
+
+    next_dice_index_in_list: Optional[int] = None
+    single_dice_sample:  Optional[Union[List,np.array]] = None
+
     name:Optional[str] = None
+
     def __post_init__(self):
-        self.num_qubits = self.normal_vectorizer.num_qubits
-        if self.dynamic_vectorizer is None or sum(self.dynamic_vectorizer.p_herald) == 0:
+        self.num_qubits = self.normal_generator.num_qubits
+        self.dummy_generator = DummyInsGenerator(list_of_MQE=[])
+
+        if self.posterior_generator is None or self.posterior_generator.num_herald_locations == 0:
             self.is_erasure = False
         else:
             self.is_erasure = True
-        if self.erasure_vectorizer is None or self.dynamic_vectorizer is None:
-            self.erasure_vectorizer = self.normal_vectorizer
-            self.dynamic_vectorizer = self.normal_vectorizer
+        if self.erasure_generator is None or self.posterior_generator is None:
+            self.erasure_generator = self.normal_generator
+            self.posterior_generator = self.normal_generator
 
     def get_instruction(self, 
                         qubits: Union[List[int], Tuple[int]],
                         mode:str):
         '''
         return list of args that can be used in  stim.circuit.append()
-
-        This function is a newer implementation of generating instructions with posterior probabilities. 
-        The vectorization is over a batch of operations. For example, rather than doing one CNOT at a time, this vectorized method 
-            generates one batch of CNOT instructions at a time.
-        Accept qubits in the style of stim instructions, len(qubits) == integer multiple of self.num_qubits
-
-        # TODO: do I have issue with this:
-        # fill_values = fill_values.reshape(num_parallel, self.num_herald_locations).T # is this working? 
-        fill_values = fill_values.reshape( self.num_herald_locations,num_parallel) # What used to work before I change to data_qubits_array = np.array(qubits).reshape(-1,self.num_qubits).T
         '''
-        
 
-        if mode == 'normal' or self.is_erasure == False: 
-            instructions = self.normal_vectorizer.get_instruction(qubits=qubits)
+
+        if mode == 'deterministic':
+            instructions =  self.deterministic_generator.get_instruction(qubits,self.next_dice_index_in_list,self.single_dice_sample)
+        elif mode == 'dummy':
+            instructions =  self.dummy_generator.get_instruction(qubits)
+        elif mode == 'normal' or self.is_erasure == False: 
+            instructions = self.normal_generator.get_instruction(qubits=qubits)
         elif mode == 'erasure':
-            instructions =  self.erasure_vectorizer.get_instruction(qubits,self.next_ancilla_qubit_index_in_list)
-        elif mode == 'dynamic':
-            instructions =  self.dynamic_vectorizer.get_instruction(qubits,self.erasure_measurement_index_in_list,self.single_measurement_sample)
-        elif mode == 'deterministic':
-            instructions =  self.deterministic_vectorizer.get_instruction(qubits)
+            instructions =  self.erasure_generator.get_instruction(qubits,self.next_ancilla_qubit_index_in_list)
+        elif mode == 'posterior':
+            instructions =  self.posterior_generator.get_instruction(qubits,self.erasure_measurement_index_in_list,self.single_measurement_sample)
+
         else:
             raise Exception("unsupported mode")
         
-        # with open('log.txt', 'a') as file:
-        #     # Write the instructions to the file, starting on a new line
-        #     file.write('\n name:'+self.name+'  mode:'+mode+'\n')
-        #     file.write(str(instructions))
+        with open('log.txt', 'a') as file:
+            # Write the instructions to the file, starting on a new line
+            file.write('\n name:'+self.name+'  mode:'+mode+'\n')
+            file.write(str(instructions))
 
         return instructions
-
+    def __repr__(self) -> str:
+        return self.name
 
 @dataclass
-class Gate_error_model:
+class GateErrorModel:
     """
-    A Gate_error_model contains one or more Gate_error_mechanisms,
-    Different Gate_error_mechanisms within a Gate_error_model are considered independent (they can happen at the same time at higher order probability)
-
-    A Gate_error_model is used to describe erasure conversion and normal error mechannism are independent,
-    A Gate_error_model can only have one erasure conversion mechanism.
+    A GateErrorModel contains one or more ErrorMechanism,
+    Different ErrorMechanism within a GateErrorModel are considered independent (they can happen at the same time)
+    A GateErrorModel can only have one erasure conversion mechanism.
     """
 
-    list_of_mechanisms: List[Error_mechanism]
+    list_of_mechanisms: List[ErrorMechanism]
+    name_to_mechanism: Dict[str, ErrorMechanism] = field(init=False)
 
     def __post_init__(self):
+        self.name_to_mechanism = {mechanism.name: mechanism for mechanism in self.list_of_mechanisms}
         if len(self.list_of_mechanisms) == 0:
             self.trivial = True
             return
@@ -131,8 +124,8 @@ class Gate_error_model:
     def __repr__(self) -> str:
         s = '''Gate_error_model of the following mechanisms:\n'''
         for i,mech in enumerate(self.list_of_mechanisms):
-            s += f"mechanism {i}: \n"
-            s += mech.__repr__()
+            s += f"mechanism {i}, name:{mech.name} \n"
+            # s += mech.__repr__()
             
         return  s
 
@@ -146,13 +139,19 @@ def get_1q_depolarization_mechanism(p_p):
                 MQE(p_p/3,[SQE("Y",False)]),
                 MQE(p_p/3,[SQE("Z",False)])
             ]
-    normal_vectorizer = NormalInstructionVectorizer(
+    normal_generator = NormalInsGenerator(
             list_of_MQE = list_of_MQE,
             instruction_name ='DEPOLARIZE1',
             instruction_arg = p_p)
-
-    return Error_mechanism(
-        normal_vectorizer = normal_vectorizer,
+    deterministic_generator = DeterministicInsGenerator(
+            list_of_MQE = list_of_MQE,
+            num_dice = 1,
+            instruction_name = 'DEPOLARIZE1',
+            instruction_arg = 1.0,
+        )
+    return ErrorMechanism(
+        normal_generator = normal_generator,
+        deterministic_generator = deterministic_generator,
         name = '1q depo'
         )
 
@@ -161,13 +160,19 @@ def get_1q_differential_shift_mechanism(p_z_shift):
             MQE(1-p_z_shift,[SQE("I",False)]),
             MQE(p_z_shift,[SQE("Z",False)])
         ]
-    normal_vectorizer = NormalInstructionVectorizer(
+    normal_generator = NormalInsGenerator(
             list_of_MQE = list_of_MQE,
             instruction_name ='Z_ERROR',
             instruction_arg = p_z_shift)
-
-    return Error_mechanism(
-        normal_vectorizer= normal_vectorizer,
+    deterministic_generator = DeterministicInsGenerator(
+            list_of_MQE = list_of_MQE,
+            num_dice = 1,
+            instruction_name = 'Z_ERROR',
+            instruction_arg = 1.0,
+        )
+    return ErrorMechanism(
+        normal_generator= normal_generator,
+        deterministic_generator = deterministic_generator,
         name = '1q z shift'
         )
 
@@ -177,11 +182,11 @@ def get_1q_biased_erasure_mechanism(p_e):
             MQE(p_e/2,[SQE("I",True)]),
             MQE(p_e/2,[SQE("Z",True)])
         ]
-    normal_vectorizer = NormalInstructionVectorizer(
+    normal_generator = NormalInsGenerator(
             list_of_MQE = list_of_MQE,
             instruction_name ='Z_ERROR',
             instruction_arg = p_e/2)
-    erasure_vectorizer = ErasureInstructionVectorizer(
+    erasure_generator = ErasureInsGenerator(
             list_of_MQE = list_of_MQE,
             instruction_name = "PAULI_CHANNEL_2",
             instruction_arg = [
@@ -194,13 +199,20 @@ def get_1q_biased_erasure_mechanism(p_e):
                   # zi zx zy zz
                     0, p_e / 2, 0, 0
                 ])
-    dynamic_vectorizer = DynamicInstructionVectorizer(
+    posterior_generator = PosteriorInsGenerator(
             list_of_MQE = list_of_MQE
             )
-    return Error_mechanism(
-        normal_vectorizer = normal_vectorizer,
-        erasure_vectorizer=erasure_vectorizer,
-        dynamic_vectorizer = dynamic_vectorizer,
+    deterministic_generator = DeterministicInsGenerator(
+            list_of_MQE = list_of_MQE,
+            num_dice = 1,
+            instruction_name = 'Z_ERROR',
+            instruction_arg = 0.5,
+        )
+    return ErrorMechanism(
+        normal_generator = normal_generator,
+        erasure_generator=erasure_generator,
+        posterior_generator = posterior_generator,
+        deterministic_generator = deterministic_generator,
         name = '1q erasure'
         )
 
@@ -210,7 +222,7 @@ def get_1q_error_model(p_e,p_z_shift, p_p):
         mechanism_list.append(get_1q_differential_shift_mechanism(p_z_shift))
     if p_e>0:
         mechanism_list.append(get_1q_biased_erasure_mechanism(p_e))
-    return Gate_error_model(mechanism_list)
+    return GateErrorModel(mechanism_list)
 
 
 
@@ -238,12 +250,19 @@ def get_2q_depolarization_mechanism(p_p):
             MQE(p_p/15,[SQE("Z",False),SQE("Y",False)]),
             MQE(p_p/15,[SQE("Z",False),SQE("Z",False)]),
         ]
-    normal_vectorizer = NormalInstructionVectorizer(
+    normal_generator = NormalInsGenerator(
             list_of_MQE = list_of_MQE,
             instruction_name ='DEPOLARIZE2',
             instruction_arg = p_p)
-    return Error_mechanism(
-        normal_vectorizer=normal_vectorizer,
+    deterministic_generator = DeterministicInsGenerator(
+            list_of_MQE = list_of_MQE,
+            num_dice = 1,
+            instruction_name = 'DEPOLARIZE2',
+            instruction_arg = 1.0,
+        )
+    return ErrorMechanism(
+        normal_generator=normal_generator,
+        deterministic_generator = deterministic_generator,
         name = '2q depo'
         )
 
@@ -254,12 +273,19 @@ def get_2q_differential_shift_mechanism(p_z_shift):
             MQE(p_z_shift * (1-p_z_shift),[SQE("I",False),SQE("Z",False)]),
             MQE(p_z_shift**2,[SQE("Z",False),SQE("Z",False)]),
         ]
-    normal_vectorizer = NormalInstructionVectorizer(
+    normal_generator = NormalInsGenerator(
         list_of_MQE = list_of_MQE,
         instruction_name ='Z_ERROR',
         instruction_arg = p_z_shift)
-    return Error_mechanism(
-        normal_vectorizer= normal_vectorizer,
+    deterministic_generator = DeterministicInsGenerator(
+            list_of_MQE = list_of_MQE,
+            num_dice = 2,
+            instruction_name = 'Z_ERROR',
+            instruction_arg = 1.0,
+        )
+    return ErrorMechanism(
+        normal_generator= normal_generator,
+        deterministic_generator = deterministic_generator,
         name = '2q z shift'
         )
 
@@ -277,11 +303,11 @@ def get_2q_biased_erasure_mechanism(p_e):
                 MQE( (p_e/2)**2,[SQE("Z",True),SQE("I",True)]),
                 MQE( (p_e/2)**2,[SQE("Z",True),SQE("Z",True)]),
             ]
-    normal_vectorizer = NormalInstructionVectorizer(
+    normal_generator = NormalInsGenerator(
         list_of_MQE = list_of_MQE,
         instruction_name ='Z_ERROR',
         instruction_arg = p_e/2)
-    erasure_vectorizer = ErasureInstructionVectorizer(
+    erasure_generator = ErasureInsGenerator(
         list_of_MQE = list_of_MQE,
         instruction_name = "PAULI_CHANNEL_2",
         instruction_arg = [
@@ -294,22 +320,31 @@ def get_2q_biased_erasure_mechanism(p_e):
                 # zi zx zy zz
                 0, p_e / 2, 0, 0
             ])
-    dynamic_vectorizer = DynamicInstructionVectorizer(
+    posterior_generator = PosteriorInsGenerator(
             list_of_MQE = list_of_MQE
             )
-    return Error_mechanism(
-        normal_vectorizer = normal_vectorizer,
-        erasure_vectorizer=erasure_vectorizer,
-        dynamic_vectorizer = dynamic_vectorizer,
+    deterministic_generator = DeterministicInsGenerator(
+            list_of_MQE = list_of_MQE,
+            num_dice = 2,
+            instruction_name = 'Z_ERROR',
+            instruction_arg = 0.5,
+        )
+    return ErrorMechanism(
+        normal_generator = normal_generator,
+        erasure_generator=erasure_generator,
+        posterior_generator = posterior_generator,
+        deterministic_generator = deterministic_generator,
         name = '2q erasure'
         )
 
 
-def get_2q_error_model(p_e,p_z_shift, p_p):
+def get_2q_error_model(p_p,
+                       p_e,
+                       p_z_shift = 0):
     mechanism_list = [get_2q_depolarization_mechanism(p_p)]
     if p_z_shift>0:
         mechanism_list.append(get_2q_differential_shift_mechanism(p_z_shift))
     if p_e>0:
         mechanism_list.append(get_2q_biased_erasure_mechanism(p_e))
-    return Gate_error_model(mechanism_list)
+    return GateErrorModel(mechanism_list)
 

@@ -9,21 +9,20 @@ class Sample_decode_job:
     circuit_id: str
     d: int
     p_e: float
-    p_z_shift:float
     p_p: float
-    p_m:float
     shots: int
 
+    num_e_flipped: int
+    num_p_flipped: int
 
     def get_builder(self):
         # Assemble circuit builder
         after_cz_error_model = get_2q_error_model(p_e=self.p_e,
-                                                  p_z_shift=self.p_z_shift, 
                                                   p_p=self.p_p)
         builder = easure_circ_builder(rounds = self.d,
                                       distance= self.d,
                                       after_cz_error_model=after_cz_error_model,
-                                      measurement_error=self.p_m
+                                      measurement_error=0
                                       )
         builder.generate_circuit_and_decoding_info()
         return builder
@@ -33,9 +32,9 @@ class Sample_decode_job:
             from IPython.display import clear_output
 
         builder = self.get_builder()        
-        sampler = builder.erasure_circuit.compile_sampler()
+        sampler = builder.erasure_circuit.compile_sampler() #expensive step, 16s for d13, 4s for d11, 0.7s for d9
         meas_samples = sampler.sample(shots=self.shots)
-        converter = builder.erasure_circuit.compile_m2d_converter()
+        converter = builder.erasure_circuit.compile_m2d_converter() #expensive step, 16s for d13, 4s for d11, 0.7s for d9
         det_samples, actual_obs_chunk = converter.convert(measurements=meas_samples,
                                                                 separate_observables=True)
         t1 = time.time()
