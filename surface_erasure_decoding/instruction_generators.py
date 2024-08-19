@@ -20,12 +20,6 @@ def chunked(iterable, chunk_size):
             break
         yield chunk
 
-def zip_longest_cycle(iterables):
-    max_len = max(len(it) for it in iterables)
-    cycled_iterables = [cycle(iterable) for iterable in iterables]
-    for _ in range(max_len):
-        yield tuple(next(it) for it in cycled_iterables)
-
 
 @dataclass
 class SQE: #stands for Single_qubit_error/event
