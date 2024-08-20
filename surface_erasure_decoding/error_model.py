@@ -68,10 +68,10 @@ class ErrorMechanism:
         else:
             raise Exception("unsupported mode")
         
-        with open('log.txt', 'a') as file:
-            # Write the instructions to the file, starting on a new line
-            file.write('\n name:'+self.name+'  mode:'+mode+'\n')
-            file.write(str(instructions))
+        # with open('log.txt', 'a') as file:
+        #     # Write the instructions to the file, starting on a new line
+        #     file.write('\n name:'+self.name+'  mode:'+mode+'\n')
+        #     file.write(str(instructions))
 
         return instructions
     def __repr__(self) -> str:
