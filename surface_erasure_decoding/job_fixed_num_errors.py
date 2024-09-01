@@ -17,12 +17,14 @@ class Sample_decode_job:
     d: int
     p_e: float
     p_p: float
+    p_z_shift: float
+    p_m: float
+
     shots: int
 
     num_e_flipped: int
     num_p_flipped: int
 
-    p_m: float = 0
 
     def sample_and_print_result(self,print_progress = False):
         if print_progress:
