@@ -84,17 +84,18 @@ class Sample_decode_job:
             num_errors += actual_obs_chunk[0][0] != predicted
             num_shots += 1
 
+        # type cast in case some of them are numpy types which are not JSON serializable
         result = {
-            'job_id': self.job_id,
-            'circuit_id': self.circuit_id,
-            'd': self.d,
-            'p_e':self.p_e,
-            'p_p':self.p_p,
-            'p_z_shift':self.p_z_shift,
-            'p_m':self.p_m,
+            'job_id': str(self.job_id),
+            'circuit_id': str(self.circuit_id),
+            'd': int(self.d),
+            'p_e':float(self.p_e),
+            'p_p':float(self.p_p),
+            'p_z_shift':float(self.p_z_shift),
+            'p_m':float(self.p_m),
             'shots': int(num_shots),
-            'num_e_flipped':self.num_e_flipped,
-            'num_p_flipped':self.num_p_flipped,
+            'num_e_flipped':int(self.num_e_flipped),
+            'num_p_flipped':int(self.num_p_flipped),
             'num_shots': int(num_shots),
             'num_errors': int(num_errors),
         }
