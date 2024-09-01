@@ -89,11 +89,14 @@ class Sample_decode_job:
             'circuit_id': self.circuit_id,
             'd': self.d,
             'p_e':self.p_e,
-            'p_z_shift':self.p_z_shift,
             'p_p':self.p_p,
+            'p_z_shift':self.p_z_shift,
             'p_m':self.p_m,
             'shots': int(num_shots),
-            'new_circ': int(num_errors),
+            'num_e_flipped':self.num_e_flipped,
+            'num_p_flipped':self.num_p_flipped,
+            'num_shots': int(num_shots),
+            'num_errors': int(num_errors),
         }
 
         return result
