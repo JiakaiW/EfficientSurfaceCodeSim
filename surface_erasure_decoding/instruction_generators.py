@@ -263,7 +263,6 @@ class PosteriorInsGenerator(InsGeneratorPosteriorProbs):
         assert len(qubits) % self.num_qubits == 0, "wrong number of qubits"
         data_qubits_array = np.array(qubits).reshape(-1,self.num_qubits).T
         
-
         if self.num_herald_locations > 0:
             padded_ancillas,num_parallel = self.get_padded_new_ancillas_array_update_list(data_qubits_array,erasure_measurement_index_in_list)
 
@@ -314,6 +313,7 @@ class DeterministicInsGenerator(InsGeneratorConditional):
         self.herald_locations = np.array(range(self.num_dice))
         self.num_qubit_per_dice = int(self.num_qubits/self.num_dice)
 
+
         if isinstance(self.instruction_name,List):
             assert len(self.instruction_name) == len(self.instruction_arg)
         else:
@@ -324,7 +324,7 @@ class DeterministicInsGenerator(InsGeneratorConditional):
             self.instruction_name.append(self.instruction_name[-1])
             self.instruction_arg.append(self.instruction_arg[-1])
 
-        InsGeneratorPosteriorProbs.__post_init__(self)
+        InsGeneratorConditional.__post_init__(self)
 
     def get_instruction(self,qubits:List[int],
                         dice_index_in_list:List[int],
@@ -334,7 +334,6 @@ class DeterministicInsGenerator(InsGeneratorConditional):
         '''
         assert len(qubits) % self.num_qubits == 0, "wrong number of qubits"
         data_qubits_array = np.array(qubits).reshape(-1,self.num_qubits).T
-
         padded_dices,num_parallel = self.get_padded_new_ancillas_array_update_list(data_qubits_array,dice_index_in_list) # padded_dices is an array of dice idx
         
         positive_dices = np.zeros(padded_dices.shape, dtype=bool) #positive_dices is an array of dice results corresponding to padded_dices

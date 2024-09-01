@@ -258,7 +258,7 @@ def get_2q_depolarization_mechanism(p_p):
             list_of_MQE = list_of_MQE,
             num_dice = 1,
             instruction_name = 'DEPOLARIZE2',
-            instruction_arg = 1.0,
+            instruction_arg = 1,
         )
     return ErrorMechanism(
         normal_generator=normal_generator,
