@@ -4,7 +4,7 @@ Simulate and decoder surface code with erasure (assuming perfect erasure convert
 Features highly abstracted and customizable noise modelling classes that supports 
 1. simulating and decoding perfect erasure conversion
 2. injecting fixed number of errors into the circuit
-3. vectorization of instruction generation for 1. and 2. by using numpy
+3. vectorization of instruction generation for 1. and 2. by using numpy. The rules for vectorization are stored in these classes: [posterior instructions for decoding erasure](https://github.com/JiakaiW/surface_erasure_decoding/blob/main/surface_erasure_decoding/instruction_generators.py#L93) and [Deterministic instructions for use in importance sampling](https://github.com/JiakaiW/surface_erasure_decoding/blob/main/surface_erasure_decoding/instruction_generators.py#L290)
 
 # Direct Monte-Carlo usage:
 1. use Docker to build a container and store in DockerHub.
