@@ -1,9 +1,10 @@
 # surface_erasure_decoding
 Simulate and decoder surface code with erasure (assuming perfect erasure convertion) [Stim](https://github.com/quantumlib/Stim)'s c++ code
 
-Features highly abstracted and customizable noise modelling capability that supports 
+Features highly abstracted and customizable noise modelling classes that supports 
 1. simulating and decoding perfect erasure conversion
 2. injecting fixed number of errors into the circuit
+3. vectorization of instruction generation for 1. and 2. by using numpy
 
 # Direct Monte-Carlo usage:
 1. use Docker to build a container and store in DockerHub.
