@@ -8,7 +8,7 @@ Features highly abstracted and customizable noise modelling classes that support
 
 # Direct Monte-Carlo usage:
 1. use Docker to build a container and store in DockerHub.
-2. generate decoding problem instances and send those instances to distributed computing
+2. generate decoding problem instances [(job class)](surface_erasure_decoding/job.py)) and send those instances to distributed computing
 3. gather those decoding results in form of JSON files
 4. data analytics on my local computer
 
