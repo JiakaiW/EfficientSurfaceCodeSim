@@ -11,12 +11,13 @@ Circuit level noise is abstracted into these layers:
 2. An ErrorMechanism contains multiple InstructionGenerators that tells the ErrorMechanism how to inject stim instructions in different circuit generation modes
 3. InstructionGenerators uses abstraction like MQE (Multi Qubit Error/Event) and SQE (Single Qubit Error/Event) to calculate the posterior probability given leakage detection results.
 
-# Direct Monte-Carlo usage:
+## Direct Monte-Carlo usage with distributed computing:
 1. use Docker to build a container and store in DockerHub [(link to repo)](https://hub.docker.com/r/jiakaiw/surfacesimulationtest/tags).
 2. generate decoding problem instances [(job class)](surface_erasure_decoding/job.py)) and send those instances to distributed computing
 3. gather those decoding results in form of JSON files
 4. data analytics on my local computer
 
-# Importance sampling usage (injecting fixed number of errors in random locations):
+## Importance sampling usage (injecting fixed number of errors in random locations):
 1. Use "deterministic" mode when generating the circuit, and decode as usual. (call decode_by_generating_new_circuit if erasure conversion is involved.)
 2. Currently we don't have a solution to efficiently estimate the logical error rate (WIP).
+3. [(link to demo of importance sampling and decoding)](notebooks/usage_demo.ipynb)
