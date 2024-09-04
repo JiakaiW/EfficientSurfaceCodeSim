@@ -12,7 +12,7 @@ Circuit level noise is abstracted into these layers:
 3. InstructionGenerators uses abstraction like MQE (Multi Qubit Error/Event) and SQE (Single Qubit Error/Event) to calculate the posterior probability given leakage detection results.
 
 # Direct Monte-Carlo usage:
-1. use Docker to build a container and store in DockerHub.
+1. use Docker to build a container and store in DockerHub [(link to repo)](https://hub.docker.com/r/jiakaiw/surfacesimulationtest/tags).
 2. generate decoding problem instances [(job class)](surface_erasure_decoding/job.py)) and send those instances to distributed computing
 3. gather those decoding results in form of JSON files
 4. data analytics on my local computer
