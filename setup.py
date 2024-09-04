@@ -53,7 +53,6 @@ setup(
     project_urls={
         # "Documentation": "https://github.com/JiakaiW/surface_erasure_decoding",
         "Source Code": "https://github.com/JiakaiW/surface_erasure_decoding",
-        # "Tutorials": "https://github.com/EQuS/jaxquantum/tree/main/tutorials",
     },
     include_package_data=True,
 )
