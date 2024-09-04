@@ -21,3 +21,4 @@ Circuit level noise is abstracted into these layers:
 1. Use "deterministic" mode when generating the circuit, and decode as usual. (call decode_by_generating_new_circuit if erasure conversion is involved.)
 2. Currently we don't have a solution to efficiently estimate the logical error rate (WIP).
 3. [(link to demo of importance sampling and decoding)](notebooks/usage_demo.ipynb)
+4. The capability to deterministically inject error allows extension to simulate undetected leakage (without needing to use stim.TableauSimulator)
