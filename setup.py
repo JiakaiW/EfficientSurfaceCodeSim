@@ -2,8 +2,8 @@ import os
 
 from setuptools import setup, find_namespace_packages
 
-DIST_NAME = "surface_erasure_decoding"
-PACKAGE_NAME = "surface_erasure_decoding"
+DIST_NAME = "EfficientSurfaceCodeSim"
+PACKAGE_NAME = "EfficientSurfaceCodeSim"
 
 REQUIREMENTS = [
     "numpy",
@@ -30,7 +30,7 @@ setup(
     description=DIST_NAME,
     long_description=README,
     long_description_content_type="text/markdown",
-    url="https://github.com/JiakaiW/surface_erasure_decoding",
+    url="https://github.com/JiakaiW/EfficientSurfaceCodeSim",
     author="Jiakai Wang",
     author_email="jwang2648@wisc.edu",
     license="Apache 2.0",
@@ -51,8 +51,8 @@ setup(
     keywords="surface code erasure decoding",
     python_requires=">=3.7",
     project_urls={
-        # "Documentation": "https://github.com/JiakaiW/surface_erasure_decoding",
-        "Source Code": "https://github.com/JiakaiW/surface_erasure_decoding",
+        # "Documentation": "https://github.com/JiakaiW/EfficientSurfaceCodeSim",
+        "Source Code": "https://github.com/JiakaiW/EfficientSurfaceCodeSim",
     },
     include_package_data=True,
 )

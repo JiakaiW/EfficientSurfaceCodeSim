@@ -1,4 +1,4 @@
-from surface_erasure_decoding.instruction_generators import *
+from EfficientSurfaceCodeSim.instruction_generators import *
 
 
 

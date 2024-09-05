@@ -16,7 +16,7 @@ import json
 import sys
 import zipfile
 import pickle
-from surface_erasure_decoding.error_model import *
+from EfficientSurfaceCodeSim.error_model import *
 import time
 
 

@@ -1,10 +1,10 @@
-# surface_erasure_decoding
+# EfficientSurfaceCodeSim
 Simulate and decoder surface code with erasure (assuming perfect erasure convertion) [Stim](https://github.com/quantumlib/Stim)'s c++ code
 
 Features highly abstracted and customizable noise modelling classes that supports 
 1. simulating and decoding perfect erasure conversion
 2. injecting fixed number of errors into the circuit
-3. vectorization of instruction generation for 1. and 2. by using numpy. The rules for vectorization are stored in these classes: a) posterior instruction generator for decoding erasure and deterministic instruction generator for usage  in importance sampling[link](https://github.com/JiakaiW/surface_erasure_decoding/blob/main/surface_erasure_decoding/instruction_generators.py).
+3. vectorization of instruction generation for 1. and 2. by using numpy. The rules for vectorization are stored in these classes: a) posterior instruction generator for decoding erasure and deterministic instruction generator for usage  in importance sampling[link](https://github.com/JiakaiW/EfficientSurfaceCodeSim/blob/main/EfficientSurfaceCodeSim/instruction_generators.py).
 
 Circuit level noise is abstracted into these layers:
 1. A GateErrorModel contains one or more ErrorMechanisms,
@@ -13,7 +13,7 @@ Circuit level noise is abstracted into these layers:
 
 ## Direct Monte-Carlo usage with distributed computing:
 1. use Docker to build a container and store in DockerHub [(link to repo)](https://hub.docker.com/r/jiakaiw/surfacesimulationtest/tags).
-2. generate decoding problem instances [(job class)](surface_erasure_decoding/job.py)) and send those instances to distributed computing
+2. generate decoding problem instances [(job class)](EfficientSurfaceCodeSim/job.py)) and send those instances to distributed computing
 3. gather those decoding results in form of JSON files
 4. data analytics on my local computer
 

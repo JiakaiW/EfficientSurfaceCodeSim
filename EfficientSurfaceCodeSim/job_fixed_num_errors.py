@@ -1,5 +1,5 @@
-from surface_erasure_decoding.circuit_builder import *
-from surface_erasure_decoding.error_model import *
+from EfficientSurfaceCodeSim.circuit_builder import *
+from EfficientSurfaceCodeSim.error_model import *
 
 import time
 

@@ -7,7 +7,7 @@
 # import json
 # import os
 # import uuid
-# from surface_erasure_decoding.job import *
+# from EfficientSurfaceCodeSim.job import *
 # import shutil
 # from dataclasses import dataclass
 # import multiprocessing
