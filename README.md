@@ -1,4 +1,9 @@
 # EfficientSurfaceCodeSim
+```
+pip3 install git+https://github.com/JiakaiW/EfficientSurfaceCodeSim
+
+```
+
 Simulate and decoder surface code with erasure (assuming perfect erasure convertion) [Stim](https://github.com/quantumlib/Stim)'s c++ code
 
 Features highly abstracted and customizable noise modelling classes that supports 
