@@ -16,7 +16,7 @@ pip3 install git+https://github.com/JiakaiW/EfficientSurfaceCodeSim
 ## How it works.
 1. Noise models are abstracted into GateErrorModel, and different InstructionGenerators uses **vectorized bitwise logic** to yield instructions in batch. The bitwise logic enables decoding erasure conversion (limited to perfect erasure checks), and injecting deterministic errors for importance sampling.
 
-### Details
+### Details of ErrorModel
 1. A GateErrorModel contains one or more ErrorMechanisms that are independent.
 2. An ErrorMechanism contains multiple InstructionGenerators that tells the ErrorMechanism how to inject stim instructions in different circuit generation modes (generating erasure circuit to be sampled, or generating circuits with posterior probabilities given erasure check results, or circuits with deterministic errors for importance sampling).
 3. InstructionGenerators uses abstraction like MQE (Multi Qubit Error/Event) and SQE (Single Qubit Error/Event) to calculate the posterior probability given an array erasure detection.
