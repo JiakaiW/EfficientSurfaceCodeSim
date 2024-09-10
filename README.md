@@ -5,7 +5,7 @@ pip3 install git+https://github.com/JiakaiW/EfficientSurfaceCodeSim
 ```
 
 ![Structure of the package](assets/PackageDescription.png)
-(The blue dashed lines encircle the scope of this package. Features written in green haven't been implemented yet.)
+(The blue dashed lines encircle the scope of this package. Features written in green haven't been implemented yet.) 
 
 ## Why another package?
 
