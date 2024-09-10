@@ -14,7 +14,7 @@ pip3 install git+https://github.com/JiakaiW/EfficientSurfaceCodeSim
 2. At low physical error rates, direct Monte Carlo sampling becomes prohibative, and importance sampling is required to probe at the important region, this requires injecting fixed amount of error at random locations.
 
 ## How it works.
-1. Noise models are abstracted into GateErrorModel, and different InstructionGenerators uses vectorized bitwise logic to yield instructions in batch. The bitwise logic enables decoding erasure conversion (limited to perfect erasure checks), and injecting deterministic errors for importance sampling.
+1. Noise models are abstracted into GateErrorModel, and different InstructionGenerators uses **vectorized bitwise logic** to yield instructions in batch. The bitwise logic enables decoding erasure conversion (limited to perfect erasure checks), and injecting deterministic errors for importance sampling.
 
 ### Details
 1. A GateErrorModel contains one or more ErrorMechanisms that are independent.
