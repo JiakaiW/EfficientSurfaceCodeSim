@@ -11,9 +11,11 @@ class MCSampleDecodeJob:
     p_e: float
     p_p: float
     shots: int
+    
+    def sample_and_print_result(self,print_progress = False):
+        if print_progress:
+            from IPython.display import clear_output
 
-    def get_builder(self):
-        # Assemble circuit builder
         after_cz_error_model = get_2q_error_model(p_e=self.p_e,
                                                   p_p=self.p_p)
         builder = easure_circ_builder(rounds = self.d,
@@ -21,14 +23,9 @@ class MCSampleDecodeJob:
                                       after_cz_error_model=after_cz_error_model,
                                       measurement_error=0
                                       )
-        builder.generate_circuit_and_decoding_info()
-        return builder
-    
-    def sample_and_print_result(self,print_progress = False):
-        if print_progress:
-            from IPython.display import clear_output
+        builder.generate_helper()
+        builder.gen_erasure_conversion_circuit()
 
-        builder = self.get_builder()        
         sampler = builder.erasure_circuit.compile_sampler() #expensive step, 16s for d13, 4s for d11, 0.7s for d9
         meas_samples = sampler.sample(shots=self.shots)
         converter = builder.erasure_circuit.compile_m2d_converter() #expensive step, 16s for d13, 4s for d11, 0.7s for d9
@@ -56,11 +53,9 @@ class MCSampleDecodeJob:
             'circuit_id': self.circuit_id,
             'd': self.d,
             'p_e':self.p_e,
-            'p_z_shift':self.p_z_shift,
             'p_p':self.p_p,
-            'p_m':self.p_m,
             'shots':self.shots,
-            'new_circ':     int(new_circ_num_errors),
+            'new_circ':int(new_circ_num_errors),
         }
 
         return result
