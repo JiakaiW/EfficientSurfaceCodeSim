@@ -8,7 +8,7 @@ RUN pip3 install stim
 
 RUN pip3 install numpy scipy pymatching 
 
-RUN pip3 install git+https://github.com/JiakaiW/surface_erasure_decoding
+RUN pip3 install git+https://github.com/JiakaiW/EfficientSurfaceCodeSim
 
 # Use: in terminal run
 # docker build --no-cache -t surfacesimulationtest:v10 .
