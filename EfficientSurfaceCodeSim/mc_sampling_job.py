@@ -4,7 +4,7 @@ from EfficientSurfaceCodeSim.error_model import *
 import time
 
 @dataclass
-class Sample_decode_job:
+class MCSampleDecodeJob:
     job_id: str
     circuit_id: str
     d: int

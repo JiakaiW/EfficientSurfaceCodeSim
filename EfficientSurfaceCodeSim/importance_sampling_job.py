@@ -11,7 +11,7 @@ def generate_bool_array(tot, choose):
     return array
 
 @dataclass
-class Sample_decode_job:
+class ImportanceSamplingDecodeJob:
     job_id: str
     circuit_id: str
     d: int
