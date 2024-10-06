@@ -12,9 +12,6 @@ class MCSampleDecodeJob:
     p_p: float
     shots: int
 
-    num_e_flipped: int
-    num_p_flipped: int
-
     def get_builder(self):
         # Assemble circuit builder
         after_cz_error_model = get_2q_error_model(p_e=self.p_e,
