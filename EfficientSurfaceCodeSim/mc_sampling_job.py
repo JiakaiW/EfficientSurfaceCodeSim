@@ -11,13 +11,15 @@ class MCSampleDecodeJob:
     p_e: float
     p_p: float
     shots: int
-    
+    biased_erasure: bool = True
+
     def sample_and_print_result(self,print_progress = False):
         if print_progress:
             from IPython.display import clear_output
 
         after_cz_error_model = get_2q_error_model(p_e=self.p_e,
-                                                  p_p=self.p_p)
+                                                  p_p=self.p_p,
+                                                  biased=self.biased_erasure)
         builder = easure_circ_builder(rounds = self.d,
                                       distance= self.d,
                                       after_cz_error_model=after_cz_error_model,
