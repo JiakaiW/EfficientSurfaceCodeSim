@@ -337,14 +337,85 @@ def get_2q_biased_erasure_mechanism(p_e):
         name = '2q erasure'
         )
 
+def get_2q_erasure_mechanism(p_e):
+    list_of_MQE=  [   
+                MQE((1- p_e)**2,[SQE("I",False),SQE("I",False)]), # no detection cases
+
+                MQE(p_e/4 * (1- p_e),[SQE("I",True),SQE("I",False)]), # Single qubit detection cases
+                MQE(p_e/4 * (1- p_e),[SQE("X",True),SQE("I",False)]),
+                MQE(p_e/4 * (1- p_e),[SQE("Y",True),SQE("I",False)]),
+                MQE(p_e/4 * (1- p_e),[SQE("Z",True),SQE("I",False)]),
+
+                MQE((1- p_e) * p_e/4,[SQE("I",False),SQE("I",True)]),
+                MQE((1- p_e) * p_e/4,[SQE("I",False),SQE("X",True)]),
+                MQE((1- p_e) * p_e/4,[SQE("I",False),SQE("Y",True)]),
+                MQE((1- p_e) * p_e/4,[SQE("I",False),SQE("Z",True)]),
+
+                MQE( (p_e/4)**2,[SQE("I",True),SQE("I",True)]), # Two qubit detection cases
+                MQE( (p_e/4)**2,[SQE("I",True),SQE("X",True)]),
+                MQE( (p_e/4)**2,[SQE("I",True),SQE("Y",True)]),
+                MQE( (p_e/4)**2,[SQE("I",True),SQE("Z",True)]),
+                
+                MQE( (p_e/4)**2,[SQE("X",True),SQE("I",True)]),
+                MQE( (p_e/4)**2,[SQE("X",True),SQE("X",True)]),
+                MQE( (p_e/4)**2,[SQE("X",True),SQE("Y",True)]),
+                MQE( (p_e/4)**2,[SQE("X",True),SQE("Z",True)]),
+
+                MQE( (p_e/4)**2,[SQE("Y",True),SQE("I",True)]),
+                MQE( (p_e/4)**2,[SQE("Y",True),SQE("X",True)]),
+                MQE( (p_e/4)**2,[SQE("Y",True),SQE("Y",True)]),
+                MQE( (p_e/4)**2,[SQE("Y",True),SQE("Z",True)]),
+
+                MQE( (p_e/4)**2,[SQE("Z",True),SQE("I",True)]),
+                MQE( (p_e/4)**2,[SQE("Z",True),SQE("X",True)]),
+                MQE( (p_e/4)**2,[SQE("Z",True),SQE("Y",True)]),
+                MQE( (p_e/4)**2,[SQE("Z",True),SQE("Z",True)]),
+            ]
+    normal_generator = NormalInsGenerator( # This is per-qubit
+        list_of_MQE = list_of_MQE,
+        instruction_name ='DEPOLARIZE1',
+        instruction_arg = p_e*3/4)
+    erasure_generator = ErasureInsGenerator( # This is per-qubit
+        list_of_MQE = list_of_MQE,
+        instruction_name = "PAULI_CHANNEL_2",
+        instruction_arg = [
+                # ix iy iz
+                p_e / 4, 0, 0,
+                # xi xx xy xz
+                0, p_e / 4, 0, 0,
+                # yi yx yy yz
+                0, p_e / 4, 0, 0,
+                # zi zx zy zz
+                0, p_e / 4, 0, 0
+            ])
+    posterior_generator = PosteriorInsGenerator(
+            list_of_MQE = list_of_MQE
+            )
+    deterministic_generator = DeterministicInsGenerator(
+            list_of_MQE = list_of_MQE,
+            num_dice = 2,
+            instruction_name = 'DEPOLARIZE1',
+            instruction_arg = p_e*3/4,
+        )
+    return ErrorMechanism(
+        normal_generator = normal_generator,
+        erasure_generator=erasure_generator,
+        posterior_generator = posterior_generator,
+        deterministic_generator = deterministic_generator,
+        name = '2q erasure unbiased'
+        )
 
 def get_2q_error_model(p_p,
                        p_e,
-                       p_z_shift = 0):
+                       p_z_shift = 0,
+                       biased=True):
     mechanism_list = [get_2q_depolarization_mechanism(p_p)]
     if p_z_shift>0:
         mechanism_list.append(get_2q_differential_shift_mechanism(p_z_shift))
     if p_e>0:
-        mechanism_list.append(get_2q_biased_erasure_mechanism(p_e))
+        if biased:
+            mechanism_list.append(get_2q_biased_erasure_mechanism(p_e))
+        else:
+            mechanism_list.append(get_2q_erasure_mechanism(p_e))
     return GateErrorModel(mechanism_list)
 
